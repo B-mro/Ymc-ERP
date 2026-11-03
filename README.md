@@ -1,686 +1,657 @@
-# 企业管理系统 · 完整使用说明
+# YMC-ERP 企业管理系统
 
-> 本文档覆盖整个系统的前端页面、后端接口、数据库结构与运行架构，
-> 供团队成员快速上手与二次开发参考。
+> 基于 **Spring Boot 3 + Vue 3 + TypeScript** 的全栈企业资源管理系统，涵盖 RBAC 权限管理、动态接口配置、理赔中心、财务发票等核心业务模块。
 
 ---
 
 ## 目录
 
-- [一、系统总览](#一系统总览)
-  - 1.1 技术栈
-  - 1.2 目录结构
-  - 1.3 启动方式
-- [二、前端页面详解](#二前端页面详解)
-  - 2.1 登录 / 注册
-  - 2.2 工作台 Dashboard
-  - 2.3 系统管理（RBAC）
-  - 2.4 数据权限规则
-  - 2.5 接口管理（动态 SQL 配置）
-  - 2.6 文件管理
-  - 2.7 理赔中心（业务模块）
-  - 2.8 财务发票
-  - 2.9 404 错误页
-- [三、后端接口清单](#三后端接口清单)
-  - 3.1 认证 `/auth`
-  - 3.2 用户 `/user`
-  - 3.3 角色 `/role`
-  - 3.4 菜单 `/menu`
-  - 3.5 权限 `/permission`
-  - 3.6 数据权限 `/data-scope`
-  - 3.7 动态接口配置 `/dynamic-interface`
-  - 3.8 动态接口运行时 `/dapi/**`
-  - 3.9 理赔中心 `/claims-center`
-  - 3.10 字典项 `/sys-dict-item`
-  - 3.11 文件 `/file`
-  - 3.12 Excel 文件浏览 `/excel`
-- [四、安全架构](#四安全架构)
-  - 4.1 JWT 认证流程
-  - 4.2 权限拦截机制
-  - 4.3 数据权限拦截器
-  - 4.4 动态接口安全
-- [五、数据库表结构](#五数据库表结构)
-  - 5.1 RBAC 核心表
-  - 5.2 数据权限表
-  - 5.3 动态接口表
-  - 5.4 业务表
-- [六、典型使用流程](#六典型使用流程)
-  - 6.1 新增一个业务角色并授权
-  - 6.2 通过动态接口快速上线一个 API
-  - 6.3 配置数据行级权限
+- [一、项目概述](#一项目概述)
+- [二、技术栈](#二技术栈)
+- [三、项目目录结构](#三项目目录结构)
+- [四、环境要求](#四环境要求)
+- [五、项目打开方式](#五项目打开方式)
+- [六、后端运行方法](#六后端运行方法)
+- [七、前端运行方法](#七前端运行方法)
+- [八、默认账号](#八默认账号)
+- [九、系统功能模块](#九系统功能模块)
+- [十、安全架构](#十安全架构)
+- [十一、数据库表结构](#十一数据库表结构)
+- [十二、Git 文件上传标准](#十二git-文件上传标准)
 
 ---
 
-## 一、系统总览
+## 一、项目概述
 
-### 1.1 技术栈
+本项目是一套面向企业场景的综合性后台管理系统，采用前后端分离架构：
 
-| 层次 | 技术 | 版本 |
-|---|---|---|
-| 前端框架 | Vue 3 + TypeScript | 3.5 / 5.6 |
-| 构建工具 | Vite | 6.4 |
-| UI 组件库 | Element Plus | 2.8 |
-| 状态管理 | Pinia | 2.2 |
-| 路由 | Vue Router | 4.4 |
-| HTTP | Axios | 1.7 |
-| 后端框架 | Spring Boot | 3.2.5 |
-| JDK | OpenJDK | 17 |
-| ORM | MyBatis-Plus | 3.5.7 |
-| 数据库 | MySQL | 8.x |
-| 认证 | JJWT | 0.12.6 |
-| API 文档 | Knife4j (OpenAPI 3) | 4.5 |
-| 工具库 | Hutool | 5.8.27 |
+- **后端**：Spring Boot 3 + MyBatis-Plus + JWT，提供 RESTful API，支持 RBAC 权限模型、动态 SQL 接口配置、数据行级权限控制。
+- **前端**：Vue 3 + TypeScript + Element Plus + Vite，提供用户管理、角色权限分配、动态菜单路由、理赔业务、财务发票等功能页面。
 
-### 1.2 目录结构
+核心能力包括：
+- **RBAC 权限管理**：用户 → 角色 → 菜单/权限 多对多模型，支持动态菜单路由和按钮级权限控制。
+- **动态接口配置**：低代码风格的 SQL 配置平台，无需重启后端即可上线新的数据查询 API。
+- **数据行级权限**：MyBatis-Plus 拦截器实现，不同角色在同一张表中看到不同范围的数据。
+- **业务模块**：理赔中心（FedEx / UPS / OnTrac 三大承运商）、财务发票、文件管理等。
+
+---
+
+## 二、技术栈
+
+### 后端
+
+| 技术 | 版本 | 说明 |
+|------|------|------|
+| Java | 17 | 运行环境 |
+| Spring Boot | 3.2.5 | 核心框架 |
+| MyBatis-Plus | 3.5.7 | ORM 框架 |
+| MySQL | 8.x | 关系型数据库 |
+| JWT (jjwt) | 0.12.6 | 无状态身份认证 |
+| Knife4j | 4.5.0 | API 在线文档（OpenAPI 3） |
+| Hutool | 5.8.27 | Java 工具库（BCrypt 加密等） |
+| Maven | 3.6+ | 项目构建工具 |
+
+### 前端
+
+| 技术 | 版本 | 说明 |
+|------|------|------|
+| Vue | 3.5+ | 前端框架 |
+| TypeScript | 5.6+ | 类型安全 |
+| Vite | 6.4+ | 前端构建工具 |
+| Element Plus | 2.8+ | UI 组件库 |
+| Pinia | 2.2+ | 状态管理 |
+| Vue Router | 4.4+ | 前端路由 |
+| Axios | 1.7+ | HTTP 请求库 |
+| SheetJS (xlsx) | 0.20.3 | Excel 文件处理 |
+
+---
+
+## 三、项目目录结构
 
 ```
-ymc-admin-dev/
-├── backend/                         # 后端工程
-│   ├── src/main/java/com/example/rbac/
-│   │   ├── controller/              # 13 个 REST Controller
-│   │   ├── service/                 # 业务层（RBAC / 业务模块 / 动态接口）
-│   │   ├── mapper/                  # MyBatis-Plus Mapper
-│   │   ├── entity/                  # 15 个数据库实体
-│   │   ├── dto/ / vo/              # 数据传输 / 视图对象
-│   │   ├── security/                # JwtInterceptor / DataPermissionInterceptor / UserContext / @RequiresPermission
-│   │   ├── config/                  # WebMvcConfig / MybatisPlusConfig / Knife4jConfig / JacksonConfig
-│   │   ├── common/                  # Result<T> / PageResult<T> / BusinessException
-│   │   └── RbacAdminApplication.java
-│   └── src/main/resources/
-│       ├── application*.yml         # dev / test / prod 三套配置
-│       └── sql/                     # rbac.sql / dynamic_interface.sql / dynamic_interface_README.md
+ymc-erp-dev/
+├── backend/                                # 后端工程 (Spring Boot)
+│   ├── pom.xml                             #   Maven 依赖配置
+│   └── src/main/
+│       ├── java/com/example/rbac/
+│       │   ├── RbacApplication.java        #   启动类
+│       │   ├── common/                     #   通用模块
+│       │   │   ├── Result.java             #     统一响应封装
+│       │   │   ├── PageResult.java         #     分页响应封装
+│       │   │   ├── BusinessException.java  #     业务异常类
+│       │   │   └── GlobalExceptionHandler.java # 全局异常处理
+│       │   ├── config/                     #   配置类
+│       │   │   ├── JacksonConfig.java      #     Jackson 序列化配置
+│       │   │   ├── Knife4jConfig.java      #     Knife4j 文档配置
+│       │   │   ├── MybatisPlusConfig.java  #     MyBatis-Plus 分页插件
+│       │   │   ├── RequestLogFilter.java   #     请求日志过滤器
+│       │   │   └── WebMvcConfig.java       #     Web 拦截器注册
+│       │   ├── controller/                 #   控制器层 (17 个 Controller)
+│       │   │   ├── AuthController.java     #     认证：登录/注册/用户信息
+│       │   │   ├── SysUserController.java  #     用户管理
+│       │   │   ├── SysRoleController.java  #     角色管理
+│       │   │   ├── SysMenuController.java  #     菜单管理
+│       │   │   ├── SysPermissionController.java    # 权限管理
+│       │   │   ├── SysDataScopeController.java     # 数据权限规则
+│       │   │   ├── SysDataInterfaceController.java # 动态接口配置
+│       │   │   ├── SysDataInterfaceCategoryController.java # 接口分类
+│       │   │   ├── SysDictItemController.java      # 字典项
+│       │   │   ├── DynamicApiController.java       # 动态接口运行时
+│       │   │   ├── ClaimsCenterController.java     # 理赔中心
+│       │   │   ├── CustomerFileController.java     # 客户文件
+│       │   │   ├── ExcelFileController.java        # Excel 文件浏览
+│       │   │   ├── FedexSurchargeController.java   # FedEx 附加费
+│       │   │   ├── OnTracSurchargeController.java  # OnTrac 附加费
+│       │   │   └── FileController.java             # 文件管理
+│       │   ├── dto/                        #   数据传输对象
+│       │   │   ├── LoginDTO.java           #     登录请求
+│       │   │   ├── RegisterDTO.java        #     注册请求
+│       │   │   └── OnTracFuelSurcharge*.java #   OnTrac 燃油附加费
+│       │   ├── entity/                     #   数据库实体 (15 个)
+│       │   ├── mapper/                     #   MyBatis-Plus Mapper 接口
+│       │   ├── security/                   #   安全模块
+│       │   │   ├── JwtUtil.java            #     JWT 生成与解析
+│       │   │   ├── JwtInterceptor.java     #     JWT 请求拦截器
+│       │   │   ├── LoginUser.java          #     登录用户信息
+│       │   │   ├── RequiresPermission.java #     权限注解
+│       │   │   ├── UserContext.java        #     用户上下文 (ThreadLocal)
+│       │   │   ├── UserPermissionCache.java #    用户权限缓存
+│       │   │   └── DataPermissionInterceptor.java # 数据权限拦截器
+│       │   ├── service/                    #   业务层
+│       │   └── vo/                         #   视图对象
+│       └── resources/
+│           ├── application.yml             #   主配置文件
+│           ├── application-dev.yml         #   开发环境配置
+│           ├── application-test.yml        #   测试环境配置
+│           ├── application-prod.yml        #   生产环境配置
+│           ├── logback-spring.xml          #   日志配置
+│           └── sql/                        #   数据库初始化脚本
+│               ├── rbac.sql                #     RBAC 基础表 + 初始数据
+│               ├── dynamic_interface.sql   #     动态接口表
+│               └── dynamic_interface_README.md # 动态接口使用说明
 │
-└── frontend/                        # 前端工程
-    ├── src/
-    │   ├── api/                     # 11 个接口模块 (auth / user / role / menu / permission / dataScope / dynamicInterface / customer / publicInterface / flie / request)
-    │   ├── views/
-    │   │   ├── login/ register/     # 认证页面
-    │   │   ├── dashboard/           # 工作台
-    │   │   ├── system/              # RBAC 5 个子模块
-    │   │   ├── functionalDesign/    # 动态接口 + 文件上传
-    │   │   ├── customer/info/       # 理赔中心 (FedexPage / UpsPage / OntracPage)
-    │   │   ├── finance/             # 财务发票（iframe 嵌入）
-    │   │   └── error/404.vue
-    │   ├── layout/                  # 后台主框架 (侧边栏 + 顶栏 + TagsView)
-    │   ├── router/index.ts          # 静态路由 + 动态菜单生成
-    │   ├── stores/                  # user / tagsView Pinia Store
-    │   └── utils/                   # request.ts (axios 实例) / dict.ts / directive.ts (v-hasPermi)
-    ├── vite.config.ts
-    └── package.json
+├── frontend/                               # 前端工程 (Vue 3 + Vite)
+│   ├── package.json                        #   依赖配置
+│   ├── vite.config.ts                      #   Vite 构建配置
+│   ├── index.html                          #   入口 HTML
+│   ├── dist/                               #   编译输出（含独立 QuoteCustomer 应用）
+│   └── src/
+│       ├── main.ts                         #   应用入口
+│       ├── App.vue                         #   根组件
+│       ├── api/                            #   接口层 (12 个 API 模块)
+│       │   ├── request.ts                  #     Axios 实例封装
+│       │   ├── auth.ts                     #     认证接口
+│       │   ├── user.ts                     #     用户接口
+│       │   ├── role.ts                     #     角色接口
+│       │   ├── menu.ts                     #     菜单接口
+│       │   ├── permission.ts               #     权限接口
+│       │   ├── dataScope.ts                #     数据权限接口
+│       │   ├── dynamicInterface.ts         #     动态接口配置
+│       │   ├── customer.ts                 #     理赔中心接口
+│       │   ├── customerFile.ts             #     客户文件接口
+│       │   ├── flie.ts                     #     文件管理接口
+│       │   └── publicInterface.ts          #     公共接口
+│       ├── components/                     #   公共组件
+│       │   ├── FileUpload.vue              #     文件上传组件
+│       │   └── ImageUpload.vue             #     图片上传组件
+│       ├── directive/                      #   自定义指令
+│       │   └── permission.ts               #     v-hasPermi 权限指令
+│       ├── layout/                         #   布局组件
+│       │   ├── index.vue                   #     主布局
+│       │   └── components/                 #     侧边栏/顶栏/TagsView
+│       ├── router/                         #   路由配置
+│       │   └── index.ts                    #     静态路由 + 动态菜单生成
+│       ├── stores/                         #   Pinia 状态管理
+│       │   ├── user.ts                     #     用户状态
+│       │   ├── tagsView.ts                 #     标签页状态
+│       │   └── userCache.ts                #     用户缓存
+│       ├── styles/                         #   全局样式
+│       ├── types/                          #   TypeScript 类型定义
+│       ├── utils/                          #   工具函数
+│       │   └── dict.ts                     #     字典工具
+│       └── views/                          #   页面视图
+│           ├── login/                      #     登录页
+│           ├── register/                   #     注册页
+│           ├── dashboard/                  #     工作台
+│           ├── system/                     #     系统管理 (RBAC 5 模块)
+│           │   ├── user/                   #       用户管理
+│           │   ├── role/                   #       角色管理
+│           │   ├── menu/                   #       菜单管理
+│           │   ├── permission/             #       权限管理
+│           │   └── dataScope/              #       数据权限规则
+│           ├── functionalDesign/           #     功能设计
+│           │   ├── Interface/              #       动态接口管理
+│           │   └── uploadFile/             #       文件管理
+│           ├── customer/info/              #     理赔中心 (FedEx/UPS/OnTrac)
+│           ├── finance/                    #     财务发票
+│           ├── adminBackend/               #     后台管理
+│           └── error/                      #     404 错误页
+│
+└── .gitignore                              # Git 忽略规则
 ```
 
-### 1.3 启动方式
+---
+
+## 四、环境要求
+
+| 工具 | 版本要求 | 用途 |
+|------|----------|------|
+| JDK | 17+ | 后端运行环境 |
+| Maven | 3.6+ | 后端依赖管理与构建 |
+| MySQL | 8.x | 数据库（需 utf8mb4 字符集） |
+| Node.js | 18+ | 前端运行环境（推荐 LTS 版本） |
+| npm | 9+ | 前端包管理（Node.js 自带） |
+| IDE | IntelliJ IDEA / VS Code | 推荐开发工具 |
+
+---
+
+## 五、项目打开方式
+
+### 5.1 使用 IntelliJ IDEA 打开（推荐，适合全栈开发）
+
+**后端：**
+
+1. 启动 IntelliJ IDEA，点击 **File → Open**
+2. 选择 `ymc-erp-dev/backend` 目录
+3. IDEA 会自动识别为 Maven 项目，等待依赖下载完成
+4. 确保已安装 **Lombok 插件**：`File → Settings → Plugins → 搜索 Lombok → Install`
+5. 找到 `src/main/java/com/example/rbac/RbacApplication.java`，右键 → **Run 'RbacApplication'**
+
+**前端（可在同一窗口以模块方式打开）：**
+
+1. 在 IDEA 中点击 **File → New → Module from Existing Sources**
+2. 选择 `ymc-erp-dev/frontend` 目录
+3. 或使用 IDEA 内置终端：`View → Tool Windows → Terminal`，进入 `frontend` 目录执行命令
+
+### 5.2 使用 VS Code 打开（推荐，前端开发更友好）
+
+1. 启动 VS Code，点击 **File → Open Folder**
+2. 选择 `ymc-erp-dev` 根目录
+3. 推荐安装以下插件：
+   - **Vue - Official**（Vue 3 语法支持）
+   - **TypeScript Vue Plugin (Volar)**
+   - **ESLint**
+   - **Extension Pack for Java**（如需要后端开发）
+4. 使用 VS Code 内置终端分别启动前后端
+
+### 5.3 多窗口开发模式
+
+推荐使用两个独立的 IDE 窗口分别打开 `backend/` 和 `frontend/` 目录，便于专注开发。
+
+---
+
+## 六、后端运行方法
+
+### 6.1 数据库初始化（首次启动必做）
+
+在 MySQL 中依次执行以下 SQL 脚本：
 
 ```bash
-# === 后端 ===
+# 1. 初始化 RBAC 基础表和数据（用户/角色/菜单/权限）
+mysql -u root -p < backend/src/main/resources/sql/rbac.sql
+
+# 2. 初始化动态接口表
+mysql -u root -p < backend/src/main/resources/sql/dynamic_interface.sql
+```
+
+### 6.2 修改数据库连接配置
+
+编辑 `backend/src/main/resources/application-dev.yml`，修改数据库连接信息：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://你的数据库地址:3306/rbac_admin?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: 你的数据库用户名
+    password: 你的数据库密码
+```
+
+### 6.3 方式一：IDEA 中直接运行（推荐开发使用）
+
+1. 在 IDEA 中打开 `backend` 项目
+2. 找到启动类 `com.example.rbac.RbacApplication`
+3. 右键 → **Run 'RbacApplication.main()'**
+4. 默认使用 `application-dev.yml` 配置启动
+5. 启动成功后控制台输出启动成功标志
+
+### 6.4 方式二：Maven 命令启动
+
+```bash
+# 进入后端目录
 cd backend
-mvn clean install -DskipTests
-mvn spring-boot:run                    # 默认 application-dev.yml
-# 访问 API 文档:  http://localhost:8080/doc.html (Knife4j)
-# 访问 Swagger:   http://localhost:8080/swagger-ui/index.html
 
-# === 前端 ===
+# 使用 Maven 启动（默认 dev 环境）
+mvn spring-boot:run
+
+# 指定其他环境启动
+mvn spring-boot:run -Dspring-boot.run.profiles=test    # 测试环境
+mvn spring-boot:run -Dspring-boot.run.profiles=prod    # 生产环境
+```
+
+### 6.5 方式三：打包成 JAR 运行
+
+```bash
+# 进入后端目录
+cd backend
+
+# 编译打包（跳过测试）
+mvn clean package -DskipTests
+
+# 运行 JAR 包
+java -jar target/rbac-admin.jar
+
+# 指定环境运行
+java -jar target/rbac-admin.jar --spring.profiles.active=test
+```
+
+### 6.6 启动成功验证
+
+控制台输出类似以下信息即表示启动成功：
+
+```
+----------------------------------------------------------
+  Rbac-Admin 后端启动成功
+  API 接口文档: http://localhost:8080/api/doc.html
+----------------------------------------------------------
+```
+
+| 地址 | 说明 |
+|------|------|
+| http://localhost:8080/api/doc.html | Knife4j 接口文档（可在线调试） |
+| http://localhost:8080/api/swagger-ui/index.html | Swagger UI |
+| http://localhost:8080/api/v3/api-docs | OpenAPI 原始 JSON |
+
+服务端口：**8080**，Context Path：**/api**
+
+---
+
+## 七、前端运行方法
+
+### 7.1 安装依赖
+
+```bash
+# 进入前端目录
 cd frontend
+
+# 安装依赖
 npm install
-npm run dev                            # 默认 http://localhost:5173
-# 构建生产包: npm run build
 ```
 
-**数据库初始化**（首次启动必做）：
-1. 执行 `backend/src/main/resources/sql/rbac.sql` — RBAC 基础表 + admin 账号
-2. 执行 `backend/src/main/resources/sql/dynamic_interface.sql` — 动态接口表
+### 7.2 启动开发服务器
 
----
-
-## 二、前端页面详解
-
-### 2.1 登录 / 注册
-
-| 路径 | 说明 |
-|---|---|
-| `/login` | 账号密码登录页，BCrypt 校验，登录成功返回 JWT |
-| `/register` | 自助注册页，注册后默认分配"客户"角色 |
-
-**登录流程**：
-1. 前端 `POST /auth/login` → 返回 `{ token: "xxx" }`
-2. 前端将 token 存入 localStorage
-3. 全局 axios 请求拦截器自动在 Header 加上 `Authorization: Bearer xxx`
-4. 访问任意业务页时，前端调 `GET /auth/info` 拉取用户信息 + 菜单树 + 权限标识
-
-**默认账号**（来自 `rbac.sql`）：
-- 管理员：`admin / 123456`
-
----
-
-### 2.2 工作台 Dashboard
-
-**路由**：`/dashboard`（固定 affix，不可关闭）
-
-**页面内容**：
-- 欢迎卡片：展示当前用户昵称 + "超级管理员"标签
-- 三张统计卡片：我的角色数 / 我的权限标识数 / 可见菜单数
-- 快捷入口按钮组：按权限指令 `v-hasPermi` 动态显示
-- 最近操作列表（预留扩展区）
-
----
-
-### 2.3 系统管理（RBAC 5 模块）
-
-#### 2.3.1 用户管理 `/system/user`
-
-| 功能 | 操作 | 所需权限 |
-|---|---|---|
-| 列表查询 | 输入用户名模糊搜索 | `system:user:list` |
-| 新增用户 | 弹窗表单 (用户名/昵称/密码/手机/邮箱/角色多选) | `system:user:add` |
-| 修改用户 | 同弹窗，密码留空不更新 | `system:user:edit` |
-| 删除用户 | 批量删除，多个 ID 逗号分隔 | `system:user:remove` |
-| 状态开关 | 表格行内 Switch，启用/停用 | `system:user:edit` |
-| 分配角色 | 编辑弹窗内"角色"标签多选 | `system:user:assignRole` |
-
-**核心字段**：`username`（登录名，唯一） / `password`（BCrypt 加密） / `status`（0启用 1停用） / `roleIds[]`（关联中间表）
-
-#### 2.3.2 角色管理 `/system/role`
-
-| 功能 | 操作 | 所需权限 |
-|---|---|---|
-| 角色分页查询 | 按角色名称搜索 | `system:role:list` |
-| 新增/修改角色 | 角色名称 / 编码 / 描述 | `system:role:add` / `edit` |
-| 分配菜单 | 穿梭框：可用菜单 ↔ 已授权菜单 | `system:role:assignMenu` |
-| 分配权限 | 穿梭框：可用权限标识 ↔ 已授权权限 | `system:role:assignPermission` |
-| 删除角色 | 批量 | `system:role:remove` |
-
-**角色与菜单/权限的关系**：
-```
-SysRole ──(中间表 SysRoleMenu)──▶ SysMenu   (决定左侧菜单树)
-SysRole ──(中间表 SysRolePermission)──▶ SysPermission  (决定 @RequiresPermission 放行)
-SysUser ──(中间表 SysUserRole)──▶ SysRole
+```bash
+# 启动开发模式（支持热更新）
+npm run dev
 ```
 
-#### 2.3.3 菜单管理 `/system/menu`
+Vite 开发服务器默认配置：
+- 端口：**6662**
+- 自动打开浏览器（Chrome）
+- 自动代理 `/api` 请求到后端 `http://localhost:8080`
 
-**树形表格**（`el-table` tree-props + 默认展开）
+### 7.3 访问前端页面
 
-| 字段 | 说明 |
-|---|---|
-| `menuName` | 菜单名称（目录名 / 页面名） |
-| `menuType` | `M`=目录 / `C`=页面按钮 |
-| `path` | 路由路径 |
-| `component` | 组件路径，相对 `src/views/`，如 `system/user/index` |
-| `perms` | 权限标识，如 `system:user:list` |
-| `icon` | Element Plus 图标名 |
-| `orderNum` | 同级排序 |
-| `visible` | `0`=显示 / `1`=隐藏 |
-| `parentId` | 父菜单 ID（0=顶级） |
+| 地址 | 说明 |
+|------|------|
+| http://localhost:6662 | 前端主页面 → 自动跳转登录页 |
+| http://localhost:6662/#/login | 登录页面 |
+| http://localhost:6662/#/register | 注册页面 |
+| http://localhost:6662/#/dashboard | 工作台（需登录） |
 
-**动态路由原理**：后端 `GET /menu/tree` 返回菜单树 → 前端 `router/generateRoutes()` 递归生成 `RouteRecordRaw` → `router.addRoute()` 动态注册。
+### 7.4 前端构建生产包
 
-#### 2.3.4 权限管理 `/system/permission`
+```bash
+# 构建生产环境
+npm run build
 
-独立于菜单的"细粒度按钮/API 权限标识"。
-
-| 字段 | 说明 |
-|---|---|
-| `permissionName` | 权限名称（中文） |
-| `permissionCode` | 权限标识（唯一，如 `system:user:add`） |
-| `permissionType` | API / 按钮 / 数据 等类型 |
-| `sortOrder` | 排序 |
-
-使用方式：在 Controller 方法上加 `@RequiresPermission("system:user:add")` 注解，后端通过 `PermissionAspect` 切面校验当前登录用户是否拥有该权限。
-
-#### 2.3.5 数据权限规则 `/system/dataScope`
-
-行级数据权限（区别于菜单/按钮权限），用于控制"同一张表，不同角色能看到哪些行"。
-
-| 字段 | 说明 |
-|---|---|
-| `scopeName` | 规则名称 |
-| `perms` | 绑定的菜单权限标识（在哪个页面生效） |
-| `scopeType` | `ALL`=全部数据 / `CUSTOM`=自定义范围 / `SELF`=仅本人 |
-| `tableName` | 作用的数据库表名 |
-| `fieldName` | 权限过滤字段（如 `create_by` / `dept_id`） |
-| `valueSource` | `USERID`=当前用户ID / `USERNAME`=当前用户名 / `FIXED`=固定值 |
-| `bindRoleIds` | 该规则适用的角色 ID 列表 |
-
-**拦截原理**：`DataPermissionInterceptor` 是一个 MyBatis-Plus 拦截器，在 SQL 执行前自动解析 `sys_data_scope` 中绑定到当前用户角色 + 当前操作菜单的数据权限规则，然后在 WHERE 子句里动态拼接 `fieldName = 当前用户ID` 这样的条件。
-
----
-
-### 2.4 接口管理（动态 SQL 配置）
-
-#### 列表页 `/functionalDesign/Interface`
-
-左侧分类树 + 右侧接口卡片表格：
-- 顶部搜索：接口名称 / 请求方式 / 分类筛选
-- 每条接口展示：方法深色标签（GET/POST/PUT/DELETE）、接口名、路径（等宽字体）、描述、参数数、状态开关
-- 操作按钮：编辑 / 预览 / 删除 / 一键复制调用路径
-- 支持双击名称快速编辑 / 描述行内展示
-
-#### 新增/编辑表单 `/functionalDesign/Interface/interfaceForm`
-
-**三步向导式**，低代码平台风格：
-
-| 步骤 | 标题 | 核心内容 |
-|---|---|---|
-| Step 1 | 基本信息 | 接口名称 / 分类选择 / 请求方式 / 路径（自动 `/dapi` 前缀预览） / 返回类型（SINGLE/LIST/PAGE） / 描述 |
-| Step 2 | SQL 编写 + 参数配置 | 带行号 gutter 的 SQL 编辑器 / 3 个一键模板 / 自动检测 `#{param}` / `${param}` 占位符 / 动态高亮参数卡片 |
-| Step 3 | 调用预览 + 提交 | 左右分栏：左=请求信息（URL 预览 + 参数列表 + 测试值 Tab），右=响应 JSON（HTTP 状态 + 耗时 + body） |
-
-**SQL 占位符语法**：
-```sql
--- #{paramName}  → MyBatis 预编译参数（防注入，推荐 ✅）
-SELECT * FROM orders WHERE id = #{orderId} AND status = #{status}
-
--- ${paramName}  → 字符串拼接（动态片段，谨慎使用 ⚠️）
-SELECT * FROM orders ORDER BY ${sortField} ${sortOrder}
+# 预览生产构建
+npm run preview
 ```
 
-**三种返回类型**：
-| 类型 | 含义 | SQL 写法 | 自动处理 |
-|---|---|---|---|
-| SINGLE | 单条对象 | `SELECT ... WHERE id = #{id}` | 取第一条返回 object |
-| LIST | 列表 | `SELECT ... WHERE status = #{status}` | 直接返回数组 |
-| PAGE | 自动分页列表 | 写不带 LIMIT 的全量 SQL | 后端自动加 `LIMIT offset,pageSize`，封装 `PageResult` |
+构建产物输出到 `frontend/dist/` 目录。
 
-**运行时调用**：保存后无需重启后端，立即可通过 `[GET|POST|PUT|DELETE] /dapi/你的路径` 调用。`DynamicApiController` 的 `/**` 通配请求会实时查库匹配接口配置，执行 SQL 并返回结果。
+### 7.5 前端代理配置说明
 
----
+前端开发时，Vite 已配置代理将 `/api` 请求转发到后端。配置位于 `vite.config.ts`：
 
-### 2.5 文件管理 `/functionalDesign/uploadFile`
-
-| 功能 | 说明 |
-|---|---|
-| 上传文件 | 隐藏 `<input type="file">`，支持批量，单次 ≤50MB |
-| 文件列表 | 表格展示：图标 / 原始文件名 / 大小 / 类型 / 上传人 / 上传时间 |
-| 搜索过滤 | 文件名模糊 + 文件类型下拉 |
-| 编辑信息 | 修改文件名/备注 |
-| 下载 | 点击文件名或"下载"按钮 |
-| 删除 | 批量勾选删除 |
-
-**后端实现**：文件存本地磁盘（可配置），数据库 `sys_file` 表记录元数据（original_name / stored_name / file_path / file_size / file_type / uploader_id）。
-
----
-
-### 2.6 理赔中心（业务模块）
-
-按承运商拆为 3 个独立页面，逻辑完全对称：
-
-| 承运商 | 页面 | claimsType 固定值 | 路径 |
-|---|---|---|---|
-| FedEx | `customer/info/FedexPage.vue` | `"1"` | `/customer/info/fedex` |
-| OnTrac | `customer/info/OntracPage.vue` | `"2"` | `/customer/info/ontrac` |
-| UPS | `customer/info/UpsPage.vue` | `"3"` | `/customer/info/ups` |
-
-**三个页面共同功能**：
-- 搜索区：物流单号 / 客户名称 / 索赔类型（字典 `claimsTypeOptions`）/ 问题类型（字典 `traceReasons` / `packageReasons` / `billingReasons`）/ 状态（字典 `claims_status`）
-- 数据表格：序号 / 物流单号 / 客户名称 / 索赔类型（彩色 Tag）/ 问题类型 / 金额 / 状态 / 创建时间
-- 新增/编辑弹窗：分段控件切换索赔类型，对应不同表单字段
-- 详情查看：只读弹窗
-- 删除 / 批量删除
-- 字典项实时加载（所有下拉框从后端 `/sys-dict-item/listByCode` 获取，无需硬编码）
-
----
-
-### 2.7 财务发票 `/finance/customerInvoice`
-
-**嵌入型页面**，通过 `<iframe src="/QuoteCustomer/index.html">` 加载独立的发票报价前端应用。
-
-**适配逻辑**：组件 `onMounted` 时自动计算 iframe 内容高度，监听 `window.resize` 实时调整，确保无滚动条溢出。
-
----
-
-### 2.8 404 错误页
-
-**路径**：`/:pathMatch(.*)*`（动态路由全部注册完成后由 `router.addRoute` 注册）
-
-访问不存在的菜单 / 手动输入错误 URL → 统一跳到 404 页面。
-
----
-
-## 三、后端接口清单
-
-### 3.1 认证 `/auth`
-
-| 方法 | 路径 | 说明 | 需登录 |
-|---|---|---|---|
-| POST | `/auth/login` | 登录 (BCrypt 校验密码)，返回 JWT token | ❌ |
-| POST | `/auth/register` | 注册 (默认分配"客户"角色) | ❌ |
-| GET | `/auth/info` | 获取当前用户信息：角色 / 权限标识 / 动态菜单树 | ✅ |
-| POST | `/auth/logout` | 退出（JWT 无状态，实际前端清 token） | ✅ |
-
-### 3.2 用户 `/user`
-
-| 方法 | 路径 | 说明 | 权限 |
-|---|---|---|---|
-| GET | `/user/page` | 用户分页列表 | `system:user:list` |
-| GET | `/user/{id}` | 用户详情 (含 roleIds) | `system:user:list` |
-| POST | `/user` | 新增用户 | `system:user:add` |
-| PUT | `/user` | 修改用户 | `system:user:edit` |
-| PUT | `/user/assign-roles` | 分配角色 | `system:user:assignRole` |
-| DELETE | `/user/{ids}` | 批量删除 | `system:user:remove` |
-| GET | `/user/batch?ids=1,2,3` | 批量查用户昵称 (脱敏) | `system:user:list` |
-
-### 3.3 角色 `/role`
-
-| 方法 | 路径 | 说明 | 权限 |
-|---|---|---|---|
-| GET | `/role/list` | 全部正常角色 (下拉用) | ✅ 登录即可 |
-| GET | `/role/page` | 角色分页列表 | `system:role:list` |
-| GET | `/role/{id}` | 角色详情 (含 menuIds + permissionIds) | `system:role:list` |
-| POST | `/role` | 新增角色 | `system:role:add` |
-| PUT | `/role` | 修改角色 | `system:role:edit` |
-| PUT | `/role/assign-menus` | 分配菜单 | `system:role:assignMenu` |
-| PUT | `/role/assign-permissions` | 分配权限 | `system:role:assignPermission` |
-| DELETE | `/role/{ids}` | 批量删除 | `system:role:remove` |
-
-### 3.4 菜单 `/menu`
-
-| 方法 | 路径 | 说明 | 权限 |
-|---|---|---|---|
-| GET | `/menu/list` | 菜单扁平列表 | `system:menu:list` |
-| GET | `/menu/tree` | 菜单树形结构 (含嵌套 children) | `system:menu:list` |
-| POST | `/menu` | 新增菜单 | `system:menu:add` |
-| PUT | `/menu` | 修改菜单 | `system:menu:edit` |
-| DELETE | `/menu/{id}` | 删除菜单 | `system:menu:remove` |
-
-### 3.5 权限 `/permission`
-
-| 方法 | 路径 | 说明 | 权限 |
-|---|---|---|---|
-| GET | `/permission/list` | 全部正常权限 (穿梭框用) | `system:permission:list` |
-| GET | `/permission/page` | 权限分页列表 | `system:permission:list` |
-| POST | `/permission` | 新增权限 | `system:permission:add` |
-| PUT | `/permission` | 修改权限 | `system:permission:edit` |
-| DELETE | `/permission/{ids}` | 批量删除 | `system:permission:remove` |
-
-### 3.6 数据权限 `/data-scope`
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/data-scope/menu-perms` | 获取所有菜单权限标识下拉项 |
-| POST | `/data-scope/list` | 规则列表查询 |
-| POST | `/data-scope/page` | 规则分页查询 |
-| POST | `/data-scope/detail` | 规则详情 |
-| POST | `/data-scope/save` | 新增规则 + 绑定角色 |
-| POST | `/data-scope/update` | 修改规则 + 重新绑定角色 |
-| POST | `/data-scope/delete` | 删除规则 |
-| POST | `/data-scope/bindRoles` | 单独重新绑定角色 |
-| POST | `/data-scope/boundRoles` | 查询已绑定的角色 ID |
-
-### 3.7 动态接口配置 `/dynamic-interface`
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/dynamic-interface/page` | 接口分页 (支持 name / method / categoryId 筛选) |
-| GET | `/dynamic-interface/{id}` | 接口详情 (含参数列表) |
-| POST | `/dynamic-interface` | 新增接口 |
-| PUT | `/dynamic-interface` | 修改接口 |
-| DELETE | `/dynamic-interface/{ids}` | 批量删除 |
-| GET | `/dynamic-interface/category/tree` | 分类树 |
-| POST | `/dynamic-interface/category` | 新增分类 |
-| PUT | `/dynamic-interface/category` | 修改分类 |
-| DELETE | `/dynamic-interface/category/{id}` | 删除分类 |
-
-### 3.8 动态接口运行时 `/dapi/**`
-
-**通配控制器** `DynamicApiController`，根据 HTTP 方法 + 请求路径实时匹配 `sys_data_interface` 表中的启用接口配置。
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET / POST / PUT / DELETE | `/dapi/{path}` | 执行配置好的 SQL 并返回结果 |
-
-返回结构：
-```json
-// SINGLE → { "id": 1, "name": "xxx", ... }
-// LIST   → [{ "id": 1, ... }, { "id": 2, ... }]
-// PAGE   → { "records": [...], "total": 100, "pageNum": 1, "pageSize": 10 }
-```
-
-### 3.9 理赔中心 `/claims-center`
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/claims-center/list` | 列表查询 (可按 logisticsNo / claimsType / type / customerName 过滤) |
-| POST | `/claims-center/page` | 分页查询 |
-| POST | `/claims-center/detail` | 详情 `{ "id": 1 }` |
-| POST | `/claims-center/save` | 新增 |
-| POST | `/claims-center/update` | 修改 |
-| POST | `/claims-center/delete` | 批量删除 `[1, 2, 3]` |
-
-### 3.10 字典项 `/sys-dict-item`
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/sys-dict-item/listByCode` | 根据 dictCode 查启用项，返回 `[{ id, dictCode, label, value }]` |
-
-**字典使用示例**（前端）：
 ```typescript
-const options = await getDictData("claimsTypeOptions")
-// → [{ label: "丢件", value: "1" }, { label: "破损", value: "2" }, { label: "错投", value: "3" }]
+server: {
+  port: 6662,
+  proxy: {
+    '/api': {
+      target: 'http://localhost:8080',
+      changeOrigin: true
+    }
+  }
+}
 ```
 
-### 3.11 文件 `/file`
+如需连接其他后端地址，修改 `target` 字段即可。
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/file/upload` | 上传文件 (multipart/form-data，字段名 `file`) |
-| GET | `/file/page` | 文件分页列表 (支持 keyword / fileType 过滤) |
-| GET | `/file/list` | 文件全量列表 |
-| GET | `/file/{id}` | 文件详情 |
-| PUT | `/file/update` | 修改元信息 |
-| DELETE | `/file/{id}` | 删除 |
+### 7.6 完整启动流程（前后端联调）
 
-### 3.12 Excel 文件浏览 `/excel`
+```bash
+# === 终端 1：启动后端 ===
+cd backend
+mvn spring-boot:run
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/excel/files` | 列出服务器指定目录下所有 Excel 文件 |
+# === 终端 2：启动前端 ===
+cd frontend
+npm install        # 仅首次需要
+npm run dev
 
-返回：
-```json
-[{
-  "fileName": "claims_2026.xlsx",
-  "fileUrl": "http://cdn.xxx.com/excel_files/claims_2026.xlsx",
-  "fileSize": 204800,
-  "fileType": "xlsx",
-  "lastModified": "2026-10-27 09:15:30",
-  "absolutePath": "/www/java/.../excel_files/claims_2026.xlsx"
-}]
+# === 浏览器访问 ===
+# 打开 http://localhost:6662
+# 使用 admin / 123456 登录
 ```
 
 ---
 
-## 四、安全架构
+## 八、默认账号
 
-### 4.1 JWT 认证流程
+数据库初始化脚本 `rbac.sql` 预设了以下账号：
 
-```
-┌──────────┐  POST /auth/login   ┌──────────────┐
-│  前端    │ ─────────────────▶ │ AuthController│
-│  用户    │  {username, password}              │
-└──────────┘                     └──────┬───────┘
-     ▲                                    │ BCrypt 校验
-     │ 返回 token                        ▼
-     │                              ┌──────────────┐
-     │                              │  生成 JWT    │
-     │                              │ userID + role │
-     │                              └──────────────┘
-     │
-  前端存 localStorage
-  每次请求 Header:
-  Authorization: Bearer <token>
-     │
-     ▼
-┌───────────────────────┐
-│ JwtInterceptor        │
-│ 1. 解析 JWT 签名校验   │
-│ 2. 查 Redis 黑名单?   │
-│ 3. 写入 UserContext    │
-│ 4. 放行 or 401         │
-└───────────────────────┘
-```
+| 角色 | 用户名 | 密码 | 说明 |
+|------|--------|------|------|
+| 超级管理员 | admin | 123456 | 拥有全部菜单和权限 |
+| 普通用户 | test | 123456 | 基础权限 |
 
-### 4.2 权限拦截机制
-
-```
-@RequiresPermission("system:user:add")
-                │
-                ▼
-       PermissionAspect (AOP)
-                │
-                ▼
-    从 UserContext 拿当前用户权限集合
-                │
-                ▼
-    contains("system:user:add") ?
-    ├─ YES → 继续执行 Controller
-    └─ NO  → 抛 BusinessException "无权限" (403)
-```
-
-### 4.3 数据权限拦截器
-
-`DataPermissionInterceptor` 是 MyBatis-Plus 的 `InnerInterceptor`，在 SQL 执行前：
-1. 提取当前操作的 `tableName`
-2. 根据当前用户角色 + 当前菜单 perms 查询 `sys_data_scope`
-3. 按 `scopeType` 处理：
-   - `ALL` → 不拼接条件
-   - `SELF` → 拼接 `fieldName = 当前用户ID`
-   - `CUSTOM` → 拼接自定义 value
-4. 改写后的 SQL 交给数据库执行
-
-### 4.4 动态接口安全
-
-| 防线 | 说明 |
-|---|---|
-| 白名单前缀校验 | SQL 必须以 SELECT / INSERT / UPDATE / DELETE 开头，禁止 DDL（DROP/ALTER/TRUNCATE） |
-| 危险关键字过滤 | 检测 DROP/ALTER/GRANT 等敏感词 |
-| `#{}` 预编译 | 推荐语法自动使用 PreparedStatement 防注入 |
-| `${}` 警示 | 使用字符串拼接的占位符在前端有红色提醒 |
-| 接口启停状态 | `status = '1'` 的接口配置才会被执行 |
+> 密码均使用 **BCrypt** 加密存储，不可逆。
 
 ---
 
-## 五、数据库表结构
+## 九、系统功能模块
 
-### 5.1 RBAC 核心表
+### 9.1 认证模块
 
-```sql
-sys_user           -- 用户 (username, password, nickname, phone, email, status)
-sys_role           -- 角色 (role_name, role_code, description, status)
-sys_permission     -- 权限 (permission_name, permission_code, permission_type)
-sys_menu           -- 菜单 (menu_name, menu_type=M/C, path, component, perms, icon, parent_id)
-sys_user_role      -- 中间表: user_id ↔ role_id
-sys_role_menu      -- 中间表: role_id ↔ menu_id
-sys_role_permission-- 中间表: role_id ↔ permission_id
-```
+- 登录：BCrypt 密码校验，返回 JWT Token（有效期 24 小时）
+- 注册：自助注册，默认分配"客户"角色
+- 获取当前用户信息：角色列表、权限标识集合、动态菜单树
+- 退出登录：前端清除 Token
 
-### 5.2 数据权限表
+### 9.2 系统管理（RBAC 5 大模块）
 
-```sql
-sys_data_scope     -- 数据权限规则 (scope_name, perms, scope_type, table_name, field_name, value_source)
-sys_role_data_scope-- 中间表: role_id ↔ scope_id
-```
+| 模块 | 路由 | 功能说明 |
+|------|------|----------|
+| 用户管理 | `/system/user` | 用户 CRUD、状态启停、分配角色 |
+| 角色管理 | `/system/role` | 角色 CRUD、分配菜单、分配权限 |
+| 菜单管理 | `/system/menu` | 树形菜单管理（目录/菜单/按钮） |
+| 权限管理 | `/system/permission` | 细粒度权限标识管理 |
+| 数据权限 | `/system/dataScope` | 行级数据权限规则配置 |
 
-### 5.3 动态接口表
+### 9.3 动态接口配置
 
-```sql
-sys_data_interface            -- 接口配置 (name, path, method, sql_content, return_type=SINGLE/LIST/PAGE, status)
-sys_data_interface_param      -- 参数定义 (interface_id, param_name, field_name, type, position, required, default_value)
-sys_data_interface_category   -- 分类树 (parent_id, name, order_num)
-```
+低代码 SQL 配置平台，三步向导式创建数据查询 API：
+1. **基本信息**：接口名称、请求方式、路径、返回类型（SINGLE/LIST/PAGE）
+2. **SQL 编写**：带行号的 SQL 编辑器，自动检测 `#{param}` / `${param}` 占位符
+3. **调用预览**：实时测试 SQL 执行效果，预览返回结果
 
-### 5.4 业务表
+保存后通过 `/dapi/{path}` 即可立即调用，无需重启后端。
 
-```sql
-claims_center       -- 理赔中心 (logistics_no, claims_type=1/2/3, type, customer_name, customer_no, issue_type, service_type, amount, status)
-sys_file            -- 文件元数据 (original_name, stored_name, file_path, file_size, file_type, uploader_id)
-sys_dict_item       -- 字典项 (dict_code, label, value, sort_order, status)
-```
+### 9.4 理赔中心
 
----
+按承运商分为三个独立页面，功能完全对称：
 
-## 六、典型使用流程
+| 承运商 | 路由 | claimsType |
+|--------|------|------------|
+| FedEx | `/customer/info/fedex` | 1 |
+| UPS | `/customer/info/ups` | 3 |
+| OnTrac | `/customer/info/ontrac` | 2 |
 
-### 6.1 新增一个业务角色并授权
+功能包括：物流单号搜索、索赔类型筛选、金额管理、状态流转等。
 
-```
-① 系统管理 → 角色管理 → 新增角色
-   └─ 填写 role_name = "理赔专员", role_code = "claims_staff"
+### 9.5 其他模块
 
-② 角色列表 → 该行的"分配菜单"
-   └─ 穿梭框勾选：理赔中心(全部3页) + 工作台
-   
-③ 角色列表 → 该行的"分配权限"
-   └─ 勾选：claims-center:list / claims-center:save / claims-center:update
-      不勾选 claims-center:delete → 理赔专员不可删除
-
-④ 系统管理 → 用户管理 → 新增用户
-   └─ 角色下拉多选：勾上"理赔专员"
-   └─ 该用户登录后 → 左侧菜单自动只看到理赔中心 + 工作台
-```
-
-### 6.2 通过动态接口快速上线一个 API
-
-```
-① 前端：功能设计 → 接口管理 → 新增接口
-
-② Step 1 基本信息
-   名称：客户发票查询
-   分类：财务模块
-   请求方式：GET
-   路径：/customerInvoice
-   返回类型：LIST
-   
-③ Step 2 SQL 编写
-   粘贴：SELECT * FROM customer_invoice WHERE status = #{status} LIMIT 20
-   → 系统自动检测到参数 status，自动生成参数卡片
-   → 手动补充参数详情：status → String → Query 参数 → 非必填
-   
-④ Step 3 调用预览
-   测试值：status = "pending" → 点"测试调用"
-   → 看到响应 JSON 正确
-   
-⑤ 点"提交保存"
-   → 立即可用：GET http://localhost:8080/dapi/customerInvoice?status=pending
-```
-
-### 6.3 配置数据行级权限
-
-```
-① 系统管理 → 数据权限规则 → 新增规则
-
-② 填写规则
-   规则名称：仅看本人创建的理赔
-   所属菜单：理赔中心 → 绑定 perms = claims-center:list
-   范围类型：CUSTOM
-   表名：claims_center
-   权限字段：create_by
-   取值来源：USERID (自动取当前登录用户ID)
-   
-③ 绑定角色：勾选 "理赔专员"
-
-④ 理赔专员登录 → 查 claims-center 列表
-   → MyBatis-Plus 拦截器自动改写 SQL：
-   SELECT * FROM claims_center WHERE create_by = 123  -- 123 为当前用户ID
-   → 只能看到自己创建的数据
-```
+- **工作台 Dashboard**：欢迎卡片、统计概览、快捷入口
+- **文件管理**：文件上传/下载/搜索/删除，支持批量操作
+- **财务发票**：iframe 嵌入独立发票报价应用
+- **字典管理**：统一字典项配置，前端下拉框动态加载
+- **404 错误页**：未匹配路由自动跳转
 
 ---
 
-## 七、附：项目中所有 dictCode 清单
+## 十、安全架构
 
-| dictCode | 使用位置 | 说明 |
-|---|---|---|
-| `claimsTypeOptions` | FedexPage / UpsPage / OntracPage | 索赔类型：丢件/破损/错投 |
-| `claims_status` | 理赔中心三页 | 理赔状态 |
-| `traceReasons` | 理赔中心三页 | 追踪问题原因 |
-| `packageReasons` | 理赔中心三页 | 包装问题原因 |
-| `billingReasons` | 理赔中心三页 | 账单问题原因 |
+### 10.1 JWT 认证流程
 
-> 字典项需在 `sys_dict_item` 表中预先配置好 label + value，前端下拉框自动加载。
+```
+用户登录 → BCrypt 校验密码 → 生成 JWT Token → 返回前端
+前端存储 Token → 每次请求 Header 携带 Authorization: Bearer <token>
+后端 JwtInterceptor 拦截 → 解析 JWT → 写入 UserContext → 放行
+```
+
+### 10.2 权限拦截机制
+
+Controller 方法上使用 `@RequiresPermission("system:user:add")` 注解声明所需权限。AOP 切面在方法执行前校验当前用户的权限集合是否包含该标识，不包含则返回 403 无权限。
+
+### 10.3 数据行级权限
+
+`DataPermissionInterceptor` 是 MyBatis-Plus 拦截器，在 SQL 执行前自动拼接行级过滤条件（如 `WHERE create_by = 当前用户ID`），实现不同角色的数据隔离。
+
+### 10.4 动态接口安全
+
+- SQL 必须以 SELECT/INSERT/UPDATE/DELETE 开头，禁止 DDL 操作
+- 检测并过滤 DROP/ALTER/GRANT 等危险关键字
+- `#{}` 占位符使用 PreparedStatement 预编译防注入
+- 接口配置启用状态开关，停用接口不可调用
 
 ---
 
-**文档版本**：2026-10-27  
-**维护者**：项目架构组  
-**对应后端版本**：rbac-admin 1.0.0  
-**对应前端版本**：rbac-admin-frontend 1.0.0
+## 十一、数据库表结构
+
+### RBAC 核心表
+
+| 表名 | 说明 |
+|------|------|
+| `sys_user` | 用户表 |
+| `sys_role` | 角色表 |
+| `sys_menu` | 菜单表（M=目录 / C=菜单 / F=按钮） |
+| `sys_permission` | 权限表 |
+| `sys_user_role` | 用户-角色 关联表 |
+| `sys_role_menu` | 角色-菜单 关联表 |
+| `sys_role_permission` | 角色-权限 关联表 |
+
+### 数据权限表
+
+| 表名 | 说明 |
+|------|------|
+| `sys_data_scope` | 数据权限规则表 |
+| `sys_role_data_scope` | 角色-数据权限 关联表 |
+
+### 动态接口表
+
+| 表名 | 说明 |
+|------|------|
+| `sys_data_interface` | 接口配置表 |
+| `sys_data_interface_param` | 接口参数定义表 |
+| `sys_data_interface_category` | 接口分类表 |
+
+### 业务表
+
+| 表名 | 说明 |
+|------|------|
+| `claims_center` | 理赔中心数据表 |
+| `sys_file` | 文件元数据表 |
+| `sys_dict_item` | 字典项表 |
+
+---
+
+## 十二、Git 文件上传标准
+
+### 12.1 提交规范
+
+本项目采用 **约定式提交**（Conventional Commits）规范，格式如下：
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**type 类型说明：**
+
+| type | 说明 | 示例 |
+|------|------|------|
+| `feat` | 新功能 | `feat(backend): 添加用户批量导入功能` |
+| `fix` | 修复 Bug | `fix(frontend): 修复菜单折叠后子路由不显示问题` |
+| `docs` | 文档更新 | `docs: 更新 README 启动说明` |
+| `style` | 代码格式（不影响功能） | `style(frontend): 统一缩进为 2 空格` |
+| `refactor` | 代码重构 | `refactor(backend): 优化 JWT 拦截器逻辑` |
+| `perf` | 性能优化 | `perf(backend): 添加用户权限缓存` |
+| `test` | 测试相关 | `test(backend): 补充 AuthController 单元测试` |
+| `chore` | 构建/工具变动 | `chore: 升级 Vite 到 6.4 版本` |
+| `ci` | CI/CD 变更 | `ci: 添加自动构建流水线` |
+
+**scope 范围说明：**
+
+| scope | 说明 |
+|-------|------|
+| `backend` | 后端相关改动 |
+| `frontend` | 前端相关改动 |
+| `all` | 前后端都涉及 |
+
+### 12.2 分支管理规范
+
+| 分支 | 说明 | 保护策略 |
+|------|------|----------|
+| `main` | 生产分支，保持稳定可发布 | 禁止直接推送，仅通过 MR/PR 合入 |
+| `dev` | 开发分支，日常开发汇聚 | 禁止直接推送，通过 MR/PR 合入 |
+| `feat/xxx` | 功能分支，从 `dev` 拉出 | 开发完成后合入 `dev` |
+| `fix/xxx` | 修复分支，从 `dev` 或 `main` 拉出 | 修复完成后合入对应分支 |
+| `hotfix/xxx` | 紧急修复分支，从 `main` 拉出 | 修复后同时合入 `main` 和 `dev` |
+
+### 12.3 .gitignore 规则
+
+项目已配置 `.gitignore` 文件，以下文件和目录**不会被提交**到 Git：
+
+| 忽略项 | 说明 |
+|--------|------|
+| `node_modules/` | 前端依赖目录 |
+| `target/` | Maven 编译输出 |
+| `*.class` / `*.jar` / `*.war` | Java 编译产物 |
+| `dist/` / `dist-ssr/` | 前端构建输出 |
+| `logs/` / `*.log` | 日志文件 |
+| `.idea/` / `*.iml` | IntelliJ IDEA 配置 |
+| `.vscode/` | VS Code 配置 |
+| `.env.local` / `*.local` | 本地环境变量 |
+| `.DS_Store` / `Thumbs.db` | 操作系统垃圾文件 |
+| `mvnw` / `mvnw.cmd` / `.mvn/` | Maven Wrapper（如不使用） |
+
+### 12.4 提交前自检清单
+
+在提交代码前，请确认以下事项：
+
+- [ ] 代码已在本地通过编译（后端 `mvn compile`，前端 `npm run build`）
+- [ ] 无控制台报错或 warning
+- [ ] 无调试用的 `console.log` / `System.out.println` 残留
+- [ ] 敏感信息（数据库密码、密钥等）未硬编码在代码中
+- [ ] 新增依赖已在 `pom.xml` 或 `package.json` 中声明
+- [ ] 不相关的文件未包含在本次提交中（使用 `git status` 检查）
+- [ ] Commit Message 符合约定式提交规范
+- [ ] 大文件（>10MB）确认是否需要 Git LFS 管理
+
+### 12.5 常见操作示例
+
+```bash
+# 查看当前状态
+git status
+
+# 添加指定文件到暂存区
+git add backend/src/main/java/com/example/rbac/controller/AuthController.java
+git add frontend/src/views/login/index.vue
+
+# 添加整个模块
+git add backend/src/main/java/com/example/rbac/service/
+git add frontend/src/views/system/
+
+# 提交（遵循约定式提交）
+git commit -m "feat(backend): 添加用户登录日志记录功能"
+
+# 推送到远程
+git push origin dev
+
+# 拉取最新代码
+git pull origin dev
+
+# 查看提交历史
+git log --oneline -20
+```
+
+### 12.6 禁止提交的内容
+
+以下内容**绝对禁止**提交到 Git 仓库：
+
+- 数据库密码、API 密钥、Token 等敏感凭证
+- 编译产物（`target/`、`dist/`、`*.class`、`*.jar`）
+- 依赖目录（`node_modules/`）
+- IDE 个人配置文件（`.idea/`、`.vscode/` 中的个人设置）
+- 日志文件和大体积临时文件
+- 用户上传的文件和业务附件
+
+---
+
+**文档版本**：2026-11-03  
+**后端版本**：rbac-admin 1.0.0  
+**前端版本**：rbac-admin-frontend 1.0.0
