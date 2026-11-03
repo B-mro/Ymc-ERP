@@ -1,0 +1,57 @@
+﻿# ============================================================
+# 开发环境 (dev)
+# 用途：本地 IDE 启动 / 开发联调
+# 特点：日志详细、Knife4j 开启、SQL 打印、弱密码仅本地用
+# ============================================================
+
+spring:
+  devtools:
+    restart:
+      enabled: true
+      additional-paths: src/main/java,src/main/resources
+      trigger-file: .reloadtrigger
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://121.43.236.24:3306/db_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: user_test
+    password: w46YpdkzZrFzfX7n
+    hikari:
+      keepalive-time: 300000
+      connection-timeout: 15000
+      max-lifetime: 1800000
+      idle-timeout: 600000
+      minimum-idle: 2
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+jwt:
+  secret: ${JWT_SECRET:rbac-dev-secret-9f3a7b2c1d8e4f5a6b7c8d9e0f1a2b3c}
+  expire: 86400000
+  header: Authorization
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+cors:
+  allowed-origins:
+    - http://localhost:*
+    - https://localhost:*
+    - http://127.0.0.1:*
+    - https://127.0.0.1:*
+    - http://0.0.0.0:*
+
+logging:
+  level:
+    com.example.rbac: debug
+
+file:
+  base-dir: ${user.home}/rbac-files
+  url-prefix: http://localhost:8080/api/files/
+
+customer-file:
+  base-dir: ${user.home}/customerFile
+  url-prefix: http://localhost:8080/api/files/customerFile/

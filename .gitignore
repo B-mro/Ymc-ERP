@@ -1,0 +1,101 @@
+# ===========================
+# Dependencies (依赖目录 - 不上传)
+# ===========================
+node_modules/
+.pnp
+.pnp.js
+
+# Maven / Java build output
+target/
+*.class
+*.jar
+*.war
+
+# Frontend build output
+dist/
+dist-ssr/
+
+# ===========================
+# Logs (日志)
+# ===========================
+*.log
+*.log.gz
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===========================
+# Environment (本地环境配置 - 不上传含本地敏感信息的)
+# ===========================
+.env.local
+.env.*.local
+*.local
+
+# ===========================
+# IDE / Editor (编辑器/IDE 配置)
+# ===========================
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===========================
+# OS files (操作系统垃圾文件)
+# ===========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===========================
+# Maven wrapper (可选：如果你不用 mvnw，可忽略)
+# ===========================
+mvnw
+mvnw.cmd
+.mvn/
+
+
+# Java
+target/
+*.class
+
+# Vue/Node
+frontend/node_modules/
+
+# maven编译目录
+backend/target/
+target/
+
+# 日志
+logs/
+*.log
+*.log.gz
+
+
+# 后端
+backend/target/
+backend/logs/
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+
+# 通用
+*.log
+*.gz
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.class
+
+
+

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <property name="LOG_PATTERN"
+              value="%d{HH:mm:ss.SSS} [%thread] %-5level %-40logger{40} - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/rbac-admin.log</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/rbac-admin.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="com.example.rbac" level="INFO"/>
+    <logger name="com.example.rbac.security.JwtInterceptor" level="WARN"/>
+    <logger name="com.example.rbac.security.DataPermissionInterceptor" level="WARN"/>
+
+    <logger name="com.baomidou.mybatisplus" level="WARN"/>
+    <logger name="com.baomidou.mybatisplus.core" level="WARN"/>
+    <logger name="org.mybatis" level="WARN"/>
+    <logger name="org.mybatis.spring" level="WARN"/>
+    <logger name="org.apache.ibatis" level="WARN"/>
+    <logger name="org.mybatis.spring.SqlSessionUtils" level="ERROR"/>
+
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="org.springframework.web" level="INFO"/>
+    <logger name="org.springframework.context" level="WARN"/>
+    <logger name="org.springframework.beans" level="WARN"/>
+
+    <logger name="io.swagger" level="WARN"/>
+    <logger name="io.springdoc" level="WARN"/>
+    <logger name="com.github.xiaoymin" level="WARN"/>
+
+    <logger name="io.jsonwebtoken" level="WARN"/>
+    <logger name="cn.hutool" level="WARN"/>
+    <logger name="org.dromara" level="WARN"/>
+
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>

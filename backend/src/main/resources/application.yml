@@ -1,0 +1,75 @@
+﻿﻿server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  main:
+    allow-circular-references: true
+  application:
+    name: rbac-admin
+  profiles:
+    active: @build.env@
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: default
+      paths-to-match: /**
+      packages-to-scan: com.example.rbac.controller
+
+# ============================================================
+# 以下为公共默认值，可被 application-{profile}.yml 覆盖
+# ============================================================
+
+cors:
+  allowed-origins:
+    - http://localhost:*
+    - https://localhost:*
+    - http://127.0.0.1:*
+    - https://127.0.0.1:*
+    - http://0.0.0.0:*
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+jwt:
+  secret: ${JWT_SECRET:rbac-dev-secret-9f3a7b2c1d8e4f5a6b7c8d9e0f1a2b3c}
+  expire: 86400000
+  header: Authorization
+
+# 日志统一由 logback-spring.xml 接管，此处无需配置
+
+file:
+  base-dir: ${FILE_BASE_DIR:/www/java/ontracfedex}
+  url-prefix: ${FILE_URL_PREFIX:http://121.43.236.24/files/}
+
+excel:
+  files:
+    dir: ${EXCEL_FILES_DIR:/www/java/OnTracFedex/excel_files}
+    url-prefix: ${EXCEL_FILES_URL_PREFIX:http://121.43.236.24/files/excel_files/}

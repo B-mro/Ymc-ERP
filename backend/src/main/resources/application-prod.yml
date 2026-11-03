@@ -1,0 +1,40 @@
+# ============================================================
+# 生产环境 (prod)
+# 用途：线上正式部署
+# 特点：所有敏感配置强制走环境变量、Knife4j 关闭、日志精简、JWT 有效期缩短
+# ============================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+jwt:
+  secret: ${JWT_SECRET}
+  expire: ${JWT_EXPIRE:7200000}
+  header: Authorization
+
+knife4j:
+  enable: ${KNIFE4J_ENABLE:false}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:6662,http://localhost:5173}
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:warn}
+    com.example.rbac: ${LOG_LEVEL_APP:info}
+
+file:
+  base-dir: ${FILE_BASE_DIR:/www/java/ontracfedex}
+  url-prefix: ${FILE_URL_PREFIX:http://121.43.236.24/files/}
+
+customer-file:
+  base-dir: ${CUSTOMER_FILE_BASE_DIR:/www/java/customerFile}
+  url-prefix: ${CUSTOMER_FILE_URL_PREFIX:http://121.43.236.24/files/customerFile/}
