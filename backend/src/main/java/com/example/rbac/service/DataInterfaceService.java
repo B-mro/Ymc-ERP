@@ -43,6 +43,8 @@ public class DataInterfaceService {
             "EXEC", "EXECUTE", "DECLARE", "INTO", "LOAD_FILE", "OUTFILE", "SLEEP",
             "BENCHMARK", "UNION_SELECT"
     );
+    private static final Pattern DANGEROUS_KEYWORD_PATTERN =
+            Pattern.compile("\\b(?:" + String.join("|", DANGEROUS_KEYWORDS) + ")\\b", Pattern.CASE_INSENSITIVE);
 
     public PageResult<SysDataInterface> page(Integer pageNum, Integer pageSize, String name,
                                              String method, Long categoryId) {
@@ -135,8 +137,9 @@ public class DataInterfaceService {
             }
         }
         if (!allowed) throw new BusinessException("SQL仅支持 SELECT/INSERT/UPDATE/DELETE 开头的语句");
-        for (String kw : DANGEROUS_KEYWORDS) {
-            if (upper.contains(kw)) throw new BusinessException("SQL包含危险关键字: " + kw);
+        Matcher matcher = DANGEROUS_KEYWORD_PATTERN.matcher(sql);
+        if (matcher.find()) {
+            throw new BusinessException("SQL包含危险关键字: " + matcher.group());
         }
     }
 
