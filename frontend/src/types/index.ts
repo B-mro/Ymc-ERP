@@ -161,3 +161,15 @@ export interface UserInfo {
   permissions: string[]
   menus: SysMenu[]
 }
+
+/** 定时任务 */
+export interface ScheduledTask {
+  taskKey: string
+  taskName: string
+  cronExpression: string
+  cronDescription: string
+  serviceName: string
+  lastExecuteTime?: string
+  lastExecuteSuccess?: boolean
+  lastExecuteMessage?: string
+}

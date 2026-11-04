@@ -421,6 +421,8 @@
 			}
 			.table-scroll {
 				overflow-x: auto;
+				overflow-y: auto;
+				max-height: 72vh;
 			}
 			table {
 				border-collapse: collapse;
@@ -53422,30 +53424,32 @@
 				},
 			};
 		</script>
-		// <script>
-		// 	globalThis.ShipGridFuelRates = {
-		// 		source: "https://www.ontrac.com/surchargesandrates/",
-		// 		series: "National U.S. Average",
-		// 		fetchedAt: "2026-10-13T09:32:54.044632+00:00",
-		// 		rates: [
-		// 			{ start: "2026-07-06", end: "2026-07-12", rate: 0.2225 },
-		// 			{ start: "2026-07-13", end: "2026-07-19", rate: 0.22 },
-		// 			{ start: "2026-07-20", end: "2026-07-26", rate: 0.225 },
-		// 			{ start: "2026-07-27", end: "2026-08-02", rate: 0.235 },
-		// 			{ start: "2026-08-03", end: "2026-08-09", rate: 0.24 },
-		// 			{ start: "2026-08-10", end: "2026-08-16", rate: 0.24 },
-		// 			{ start: "2026-08-17", end: "2026-08-23", rate: 0.2375 },
-		// 			{ start: "2026-08-24", end: "2026-08-30", rate: 0.245 },
-		// 			{ start: "2026-08-31", end: "2026-09-06", rate: 0.25 },
-		// 			{ start: "2026-09-07", end: "2026-09-13", rate: 0.2475 },
-		// 			{ start: "2026-09-14", end: "2026-09-20", rate: 0.2575 },
-		// 			{ start: "2026-09-21", end: "2026-09-27", rate: 0.2675 },
-		// 			{ start: "2026-09-28", end: "2026-10-04", rate: 0.275 },
-		// 			{ start: "2026-10-05", end: "2026-10-11", rate: 0.27 },
-		// 			{ start: "2026-10-12", end: "2026-10-18", rate: 0.265 },
-		// 		],
-		// 	};
-		// </script>
+		//
+		<script>
+			// 	globalThis.ShipGridFuelRates = {
+			// 		source: "https://www.ontrac.com/surchargesandrates/",
+			// 		series: "National U.S. Average",
+			// 		fetchedAt: "2026-10-13T09:32:54.044632+00:00",
+			// 		rates: [
+			// 			{ start: "2026-07-06", end: "2026-07-12", rate: 0.2225 },
+			// 			{ start: "2026-07-13", end: "2026-07-19", rate: 0.22 },
+			// 			{ start: "2026-07-20", end: "2026-07-26", rate: 0.225 },
+			// 			{ start: "2026-07-27", end: "2026-08-02", rate: 0.235 },
+			// 			{ start: "2026-08-03", end: "2026-08-09", rate: 0.24 },
+			// 			{ start: "2026-08-10", end: "2026-08-16", rate: 0.24 },
+			// 			{ start: "2026-08-17", end: "2026-08-23", rate: 0.2375 },
+			// 			{ start: "2026-08-24", end: "2026-08-30", rate: 0.245 },
+			// 			{ start: "2026-08-31", end: "2026-09-06", rate: 0.25 },
+			// 			{ start: "2026-09-07", end: "2026-09-13", rate: 0.2475 },
+			// 			{ start: "2026-09-14", end: "2026-09-20", rate: 0.2575 },
+			// 			{ start: "2026-09-21", end: "2026-09-27", rate: 0.2675 },
+			// 			{ start: "2026-09-28", end: "2026-10-04", rate: 0.275 },
+			// 			{ start: "2026-10-05", end: "2026-10-11", rate: 0.27 },
+			// 			{ start: "2026-10-12", end: "2026-10-18", rate: 0.265 },
+			// 		],
+			// 	};
+			//
+		</script>
 		<script>
 			(function (root) {
 				"use strict";
@@ -54377,7 +54381,7 @@
 						}
 					}
 					async function refreshFuel() {
-						console.log('OnTrac的生成账单按钮1')
+						console.log("OnTrac的生成账单按钮1");
 						fuelRefreshing.value = true;
 						try {
 							if (location.protocol === "file:")
@@ -54387,9 +54391,9 @@
 							const response = await fetch("/api/ontrac/surcharge/history", {
 								method: "GET",
 							});
-							const awaidata = await response.json()
-							console.log('OnTrac的燃油附加费',awaidata)
-							const data = awaidata.data
+							const awaidata = await response.json();
+							console.log("OnTrac的燃油附加费", awaidata);
+							const data = awaidata.data;
 							if (!response.ok) throw Error(data.error || "抓取失败");
 							if (
 								!Array.isArray(data.rates) ||
@@ -61727,7 +61731,7 @@
 				// 		source: "fixed-link",
 				// 	},
 				// ];
-				
+
 				const settingsKey = "ShipGridSharedSettingsV1";
 				let saved = {};
 				try {
@@ -62296,7 +62300,9 @@
 					if (root.ShipGridShared.isFiles())
 						await root.ShipGridShared.loadFileList();
 					else if (!root.ShipGridShared.fixed?.length) {
-						try { await root.ShipGridShared.loadFileList(); } catch {}
+						try {
+							await root.ShipGridShared.loadFileList();
+						} catch {}
 					}
 					const [quotes, rules, customers] = await Promise.all([
 						read("quotes"),
@@ -63127,7 +63133,7 @@
 					}
 					// OnTrac的点击生成账单按钮
 					async function run() {
-						console.log('第一个点击生成客户账单')
+						console.log("第一个点击生成客户账单");
 						busy.value = true;
 						clear();
 						try {
@@ -63828,8 +63834,9 @@
 								throw Error("GTS缺少客户ID，请在客户匹配规则补充");
 							used.add(ids[0]);
 							if (
-								Number(g["件数"]) !== 1 ||
-								Number(source[cols["Number of Pieces"]]) !== 1
+								source[cols["Number of Pieces"]] &&
+								(Number(g["件数"]) !== 1 ||
+									Number(source[cols["Number of Pieces"]]) !== 1)
 							)
 								throw Error("只支持单件包裹，合件需人工处理");
 							const service = String(source[cols["Service Type"]] ?? "").trim(),
@@ -64252,6 +64259,10 @@
 								)
 									throw Error("日期无效，无法确定客户旺季报价");
 							}
+							console.log(
+								"1判断点击生成时，用的是哪一个费率",
+								globalThis.FedExFuel,
+							);
 							let reference,
 								method,
 								official = dd
@@ -64259,7 +64270,9 @@
 											(x) => dd >= x.start && dd <= x.end,
 										)
 									: null;
-							if (dd && !official) throw Error("官方燃油历史未覆盖日期：" + dd);
+							console.log(dd, official);
+							if (dd && !official)
+								throw Error("2官方燃油历史未覆盖日期：" + dd);
 							const origFactor = positive(
 								settings.originalFuelFactor,
 								"原始账户燃油支付比例",
@@ -65075,7 +65088,6 @@
 						}
 					}
 					async function refreshFuel() {
-						console.log('OnTrac的生成账单按钮2')
 						fuelRefreshing.value = true;
 						try {
 							if (location.protocol === "file:")
@@ -65086,64 +65098,25 @@
 								method: "GET",
 							});
 							const raw = await response.json();
-							console.log("Fedex燃油原始响应", raw);
-							if (!response.ok) throw Error(raw.error || "官网更新失败");
-							function findArray(obj) {
-								if (Array.isArray(obj)) return obj;
-								if (obj && typeof obj === "object") {
-									for (const k of Object.keys(obj)) {
-										const found = findArray(obj[k]);
-										if (found) return found;
-									}
-								}
-								return null;
-							}
-							const data = findArray(raw);
-							if (!Array.isArray(data))
-								throw Error(
-									"接口返回数据格式异常，未找到费率数组：" +
-										JSON.stringify(raw).slice(0, 200),
-								);
-							const monthMap = {
-								一月: "01",
-								二月: "02",
-								三月: "03",
-								四月: "04",
-								五月: "05",
-								六月: "06",
-								七月: "07",
-								八月: "08",
-								九月: "09",
-								十月: "10",
-								十一月: "11",
-								十二月: "12",
-							};
-							function parseWeek(weekStr) {
-								const parts = String(weekStr).split(" - ");
-								const parsePart = (part) => {
-									const m = part.match(/(\d{1,2})\s+(\S+?),\s*(\d{4})/);
-									if (!m) return "";
-									const month = monthMap[m[2]] || "00";
-									return `${m[3]}-${month}-${m[1].padStart(2, "0")}`;
-								};
-								return {
-									start: parsePart(parts[0] || ""),
-									end: parsePart(parts[1] || ""),
-								};
-							}
-							const fuelData = {
-								source: "https://www.ontrac.com/surchargesandrates/",
-								series: "National U.S. Average",
-								fetchedAt: new Date().toISOString(),
-								rates: data.map((item) => {
-									const { start, end } = parseWeek(item.week);
-									const rate = parseFloat(item.surcharge) / 100;
-									return { start, end, rate };
-								}),
-							};
-							if (!Array.isArray(fuelData.rates) || !fuelData.rates.length)
+							if (!response.ok)
+								throw Error(raw.msg || raw.error || "官网更新失败");
+							const data = raw.data;
+							if (
+								!data ||
+								!Array.isArray(data.rates) ||
+								!data.rates.length ||
+								data.source !==
+									"https://www.fedex.com/en-us/shipping/historical-fuel-surcharge.html" ||
+								data.rates.some(
+									(x) =>
+										!Number.isFinite(x.rate) ||
+										x.rate <= 0 ||
+										x.rate >= 1 ||
+										x.start > x.end,
+								)
+							)
 								throw Error("官方数据校验失败");
-							globalThis.FedExFuel = fuelData;
+							globalThis.FedExFuel = data;
 							window.dispatchEvent(new Event("fedex-fuel-updated"));
 							fuelMessage.value = "FedEx官网历史费率已更新，请重新计算";
 						} catch (e) {
@@ -65154,8 +65127,9 @@
 					}
 					// Fedex的账单生成按钮
 					async function run() {
-						console.log('第二个点击生成客户账单')
-
+						console.log("1212");
+						console.log("121", globalThis.FedExFuel);
+						console.log("第二个点击生成客户账单");
 						busy.value = true;
 						clear();
 						try {
@@ -79451,7 +79425,7 @@
 							rejectPending(Error("导出已取消；审核结果仍保留"));
 					};
 					async function run(sheets, onProgress, onFile) {
-						console.log('第三个点击生成客户账单')
+						console.log("第三个点击生成客户账单");
 
 						if (!root.Worker)
 							throw Error("当前浏览器不支持后台导出，请使用Chrome或Edge");
@@ -80120,7 +80094,7 @@
 							}
 						}
 						async function run() {
-						console.log('第四个点击生成客户账单')
+							console.log("第四个点击生成客户账单");
 
 							if (exporting.value) return;
 							invalidate();
@@ -82042,7 +82016,7 @@
 						}
 					}
 					async function refreshFuel() {
-						console.log('OnTrac的生成账单按钮3')
+						console.log("OnTrac的生成账单按钮3");
 						fuelRefreshing.value = true;
 						try {
 							const data = await UPSInvoiceFuel.refresh();
@@ -82055,7 +82029,7 @@
 						}
 					}
 					async function run() {
-						console.log('第五个点击生成客户账单')
+						console.log("第五个点击生成客户账单");
 
 						busy.value = true;
 						clear();
@@ -82767,6 +82741,41 @@
 				);
 				refresh().catch((e) => (msg.textContent = e.message));
 			})(globalThis);
+		</script>
+		<script>
+			(function () {
+				function notifyParent() {
+					try {
+						if (window.parent && window.parent !== window) {
+							window.parent.postMessage({ __quoteCustomerHeight: 1 }, "*");
+						}
+					} catch (e) {}
+				}
+				let pending = null;
+				function schedule() {
+					if (pending) cancelAnimationFrame(pending);
+					pending = requestAnimationFrame(function () {
+						notifyParent();
+						pending = null;
+					});
+				}
+				if (document.readyState === "complete" || document.readyState === "interactive") {
+					setTimeout(schedule, 0);
+				} else {
+					window.addEventListener("DOMContentLoaded", schedule, { once: true });
+				}
+				try {
+					const mo = new MutationObserver(schedule);
+					mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+				} catch (e) {}
+				try {
+					const ro = new ResizeObserver(schedule);
+					ro.observe(document.documentElement);
+					ro.observe(document.body);
+				} catch (e) {}
+				window.addEventListener("load", schedule);
+				window.addEventListener("resize", schedule);
+			})();
 		</script>
 	</body>
 </html>

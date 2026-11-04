@@ -38,3 +38,8 @@ file:
 customer-file:
   base-dir: ${CUSTOMER_FILE_BASE_DIR:/www/java/customerFile}
   url-prefix: ${CUSTOMER_FILE_URL_PREFIX:http://121.43.236.24/files/customerFile/}
+
+
+  playwright:
+    chromium:
+      path: /root/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome

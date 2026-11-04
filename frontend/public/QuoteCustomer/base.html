@@ -64251,7 +64251,7 @@
 											(x) => dd >= x.start && dd <= x.end,
 										)
 									: null;
-							if (dd && !official) throw Error("官方燃油历史未覆盖日期：" + dd);
+							if (dd && !official) throw Error("1官方燃油历史未覆盖日期：" + dd);
 							const origFactor = positive(
 								settings.originalFuelFactor,
 								"原始账户燃油支付比例",

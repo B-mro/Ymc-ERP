@@ -55,3 +55,7 @@ file:
 customer-file:
   base-dir: ${user.home}/customerFile
   url-prefix: http://localhost:8080/api/files/customerFile/
+
+playwright:
+  chromium:
+    path: C:\Users\31045\AppData\Local\ms-playwright\chromium-1140\chrome-win\chrome.exe

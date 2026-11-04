@@ -38,6 +38,16 @@ export const constantRoutes: RouteRecordRaw[] = [
 					affix: true,
 				},
 			},
+			{
+				path: "system/scheduledTask",
+				name: "ScheduledTask",
+				component: () => import("@/views/system/scheduledTask/index.vue"),
+				meta: {
+					title: "定时任务",
+					icon: "Clock",
+					cacheName: "SystemScheduledTaskView",
+				},
+			},
 		],
 	},
 ];

@@ -4,9 +4,9 @@
       ref="iframeRef"
       src="/QuoteCustomer/index.html"
       frameborder="0"
-      scrolling="no"
+      scrolling="auto"
       class="invoice-frame"
-      @load="adjustHeight"
+      @load="onIframeLoad"
     />
   </div>
 </template>
@@ -17,6 +17,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 defineOptions({ name: 'FinanceCustomerInvoiceView' })
 
 const iframeRef = ref<HTMLIFrameElement>()
+let resizeObserver: ResizeObserver | null = null
 
 function adjustHeight() {
   const iframe = iframeRef.value
@@ -37,12 +38,51 @@ function adjustHeight() {
   }
 }
 
+function onIframeLoad() {
+  const iframe = iframeRef.value
+  if (!iframe) return
+  adjustHeight()
+
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow?.document
+    if (!doc) return
+
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+    }
+    resizeObserver = new ResizeObserver(() => {
+      adjustHeight()
+    })
+    resizeObserver.observe(doc.documentElement)
+    resizeObserver.observe(doc.body)
+  } catch {
+    // cross-origin or other error — fall back to periodic polling
+    const poll = window.setInterval(() => {
+      adjustHeight()
+      if (!iframeRef.value) window.clearInterval(poll)
+    }, 500)
+    window.setTimeout(() => window.clearInterval(poll), 15000)
+  }
+}
+
+function onMessage(e: MessageEvent) {
+  if (e.data && typeof e.data === 'object' && e.data.__quoteCustomerHeight) {
+    adjustHeight()
+  }
+}
+
 onMounted(() => {
   window.addEventListener('resize', adjustHeight)
+  window.addEventListener('message', onMessage)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', adjustHeight)
+  window.removeEventListener('message', onMessage)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
 })
 </script>
 
@@ -50,7 +90,6 @@ onBeforeUnmount(() => {
 .invoice-wrapper {
   width: 100%;
   min-height: 100%;
-  overflow: hidden;
 }
 
 .invoice-frame {
