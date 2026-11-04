@@ -1,10 +1,9 @@
 package com.example.rbac.controller;
 
-import cn.hutool.http.HttpResponse;
-import cn.hutool.http.HttpUtil;
 import com.example.rbac.common.Result;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.rbac.dto.OnTracFuelSurchargeRate;
+import com.example.rbac.dto.OnTracFuelSurchargeResponse;
+import com.example.rbac.service.FedexRyfService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -14,9 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
+import java.time.OffsetDateTime;
+import java.util.List;
 
 @Slf4j
 @Tag(name = "FedEx附加费查询")
@@ -26,59 +24,44 @@ import java.util.Locale;
 public class FedexSurchargeController {
 
     private static final String FEDEX_SURCHARGE_URL =
-            "https://www.fedex.com/etc/services/dynamic.express_weekly.apac.%s.zh_cn.false.false.13.jsonp";
+            "https://www.fedex.com/en-us/shipping/historical-fuel-surcharge.html";
 
-    private static final DateTimeFormatter DATE_FORMATTER =
-            DateTimeFormatter.ofPattern("dd MMMM, yyyy", Locale.ENGLISH);
+    private static final String SERIES = "FedEx Fuel Surcharge";
 
-    private final ObjectMapper objectMapper;
+    private final FedexRyfService fedexRyfService;
 
-    @Operation(summary = "查询FedEx亚太区国际快递附加费")
+    @Operation(summary = "查询FedEx燃油附加费历史")
     @GetMapping("/surcharge/weekly")
-    public Result<JsonNode> getWeeklySurcharge(
+    public Result<OnTracFuelSurchargeResponse> getWeeklySurcharge(
             @RequestParam(required = false) String date) {
         try {
-            String dateStr;
-            if (date != null && !date.isBlank()) {
-                dateStr = date;
-            } else {
-                dateStr = LocalDate.now().format(DATE_FORMATTER);
-            }
+            OffsetDateTime fetchedAt = OffsetDateTime.now();
 
-            String url = String.format(FEDEX_SURCHARGE_URL, dateStr);
+            List<OnTracFuelSurchargeRate> rates = fedexRyfService.queryAllRates();
 
-            log.info("调用FedEx附加费接口: {}", url);
+            OnTracFuelSurchargeResponse response = new OnTracFuelSurchargeResponse();
+            response.setSource(FEDEX_SURCHARGE_URL);
+            response.setSeries(SERIES);
+            response.setFetchedAt(fetchedAt.toString());
+            response.setRates(rates);
 
-            HttpResponse response = HttpUtil.createGet(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36")
-                    .header("Accept", "application/json, text/javascript, */*; q=0.01")
-                    .header("Referer", "https://www.fedex.com/zh-cn/shipping/surcharges.html")
-                    .header("X-Requested-With", "XMLHttpRequest")
-                    .execute();
-
-            String body = response.body();
-
-            String jsonStr = extractJsonFromJsonp(body);
-
-            JsonNode jsonNode = objectMapper.readTree(jsonStr);
-
-            return Result.ok(jsonNode);
+            log.info("查询FedEx燃油附加费历史数据，共{}条记录", rates.size());
+            return Result.ok(response);
         } catch (Exception e) {
-            log.error("获取FedEx附加费失败", e);
+            log.error("获取FedEx燃油附加费失败", e);
             return Result.fail("获取FedEx附加费失败: " + e.getMessage());
         }
     }
 
-    private String extractJsonFromJsonp(String jsonp) {
-        if (jsonp == null || jsonp.isBlank()) {
-            return "{}";
+    @Operation(summary = "同步FedEx燃油附加费数据到fedex_ryf表")
+    @GetMapping("/surcharge/sync")
+    public Result<Integer> syncSurchargeToDb() {
+        try {
+            int count = fedexRyfService.syncSurchargeData();
+            return Result.ok(count);
+        } catch (Exception e) {
+            log.error("同步FedEx燃油附加费数据失败", e);
+            return Result.fail("同步失败: " + e.getMessage());
         }
-        String trimmed = jsonp.trim();
-        int start = trimmed.indexOf('(');
-        int end = trimmed.lastIndexOf(')');
-        if (start >= 0 && end > start) {
-            return trimmed.substring(start + 1, end).trim();
-        }
-        return trimmed;
     }
 }
