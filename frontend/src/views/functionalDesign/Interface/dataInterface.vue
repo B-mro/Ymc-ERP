@@ -69,7 +69,7 @@
 
 				<div class="table-area">
 					<el-table
-						v-loading="loading"
+						v-loading="loading" 
 						:data="tableData"
 						stripe
 						height="100%"

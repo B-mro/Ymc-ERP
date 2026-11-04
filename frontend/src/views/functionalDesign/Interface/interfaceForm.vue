@@ -8,7 +8,7 @@
 			<div class="layout-sidebar">
 				<TreePanel
 					:tree-data="treeData"
-					title="接口分类"
+					title="接口分类" 
 					@node-click="handleTreeClick"
 				/>
 
@@ -36,7 +36,7 @@
 							:load="loadDbNode"
 							expand-on-click-node
 							:filter-node-method="
-								(v, n) => !v || (n.label as string)?.includes(v)
+								(v: string, n: { label: string; }) => !v || (n.label as string)?.includes(v)
 							"
 							@node-click="handleDbNodeClick"
 						>

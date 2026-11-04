@@ -28,7 +28,7 @@
 							<el-button
 								type="success"
 								:loading="callLoading"
-								size="large"
+								size="large" 
 								:icon="VideoPlay"
 								@click="step3CallApi"
 							>
@@ -49,7 +49,7 @@
 							</el-tooltip>
 						</div>
 
-						<el-tabs v-if="form.params.length > 0" class="param-tabs">
+						<el-tabs v-if="form.params.length > 0" v-model="activeParamTab" class="param-tabs">
 							<el-tab-pane label="参数列表" name="params">
 								<div class="param-table">
 									<div class="pt-head">
@@ -147,6 +147,7 @@ const form = reactive<DataInterface & { params: ParamItem[] }>({
 
 const callResult = reactive<CallResult>({ status: null, duration: null, body: "" });
 const previewParamValues = reactive<Record<string, string>>({});
+const activeParamTab = ref("params");
 
 const methodTagType = (m: string) =>
 	({ GET: "success", POST: "primary", PUT: "warning", DELETE: "danger" } as Record<string, any>)[m] || "info";
