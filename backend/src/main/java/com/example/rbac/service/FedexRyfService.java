@@ -45,7 +45,7 @@ public class FedexRyfService {
     private String chromiumPath;
 
     private static final String FEDEX_SURCHARGES_PAGE =
-            "https://www.fedex.com/en-us/shipping/historical-fuel-surcharge.html";
+            "https://www.fedex.com/en-us/shipping/fuel-surcharge.html";
 
     private static final Pattern JSONP_CALLBACK_PATTERN =
             Pattern.compile("^[a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)*\\((.*)\\)\\s*;?\\s*$", Pattern.DOTALL);
@@ -197,6 +197,9 @@ public class FedexRyfService {
             log.info("页面导航完成, 当前URL: {}", page.url());
             page.waitForTimeout(5000);
 
+            clickFuelSurchargeDropdown(page);
+            page.waitForTimeout(2000);
+
             String finalUrl = page.url();
             String pageTitle = page.title();
             String html = page.content();
@@ -207,22 +210,21 @@ public class FedexRyfService {
             System.out.println(html);
             System.out.println("========== FedEx 页面 HTML 结束 ==========");
 
-            // 提取 <tbody>...</tbody> 内容（跨行匹配）
             java.util.regex.Matcher tbodyMatcher = TBODY_PATTERN.matcher(html);
-            if (tbodyMatcher.find()) {
+            while (tbodyMatcher.find()) {
                 String tbodyContent = tbodyMatcher.group(1);
                 log.info("找到tbody内容, 长度: {}", tbodyContent.length());
 
-                // 提取每一行 <tr>...</tr>
                 java.util.regex.Matcher trMatcher = TR_PATTERN.matcher(tbodyContent);
                 while (trMatcher.find()) {
                     String trContent = trMatcher.group(1);
 
-                    // 提取 <td> 内容（去掉HTML标签属性）
                     java.util.regex.Matcher tdMatcher = TD_PATTERN.matcher(trContent);
                     List<String> cells = new ArrayList<>();
                     while (tdMatcher.find()) {
-                        cells.add(tdMatcher.group(1).trim());
+                        String raw = tdMatcher.group(1).trim();
+                        String text = raw.replaceAll("<[^>]+>", "").trim();
+                        cells.add(text);
                     }
 
                     if (cells.size() >= 2) {
@@ -233,8 +235,11 @@ public class FedexRyfService {
                         }
                     }
                 }
-            } else {
-                log.warn("未找到<tbody>标签, HTML长度: {}", html.length());
+            }
+
+            if (records.isEmpty()) {
+                log.warn("未从任何<tbody>中解析到有效记录, 尝试全HTML正则匹配...");
+                records = parseFedexFromTdPairs(html);
             }
 
             log.info("共解析到{}条FedEx费率记录", records.size());
@@ -345,6 +350,43 @@ public class FedexRyfService {
 
         log.info("解析成功: {} ~ {} => {}", start, end, rate);
         return record;
+    }
+
+    private List<FedexRyf> parseFedexFromTdPairs(String html) {
+        List<FedexRyf> records = new ArrayList<>();
+
+        java.util.regex.Pattern TD_TEXT_PATTERN = java.util.regex.Pattern.compile(
+                "<td[^>]*>(.*?)</td>",
+                java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        List<String> tdTexts = new ArrayList<>();
+        java.util.regex.Matcher m = TD_TEXT_PATTERN.matcher(html);
+        while (m.find()) {
+            String raw = m.group(1).replaceAll("<[^>]+>", "").trim();
+            tdTexts.add(raw);
+        }
+
+        log.info("全HTML共提取到{}个<td>", tdTexts.size());
+
+        for (int i = 0; i < tdTexts.size() - 1; i++) {
+            String dateCell = tdTexts.get(i);
+            String rateCell = tdTexts.get(i + 1);
+
+            boolean dateLike = FEDEX_DATE_RANGE_PATTERN.matcher(dateCell).find()
+                    || dateCell.matches(".*[A-Za-z]{3,9}\\.?\\s*\\d{1,2},?\\s*\\d{4}.*");
+            boolean rateLike = rateCell.matches(".*\\d+\\.?\\d*\\s*%.*");
+
+            if (dateLike && rateLike) {
+                FedexRyf record = parseFedexRow(dateCell, rateCell);
+                if (record != null) {
+                    records.add(record);
+                    i++;
+                }
+            }
+        }
+
+        log.info("全HTML兜底解析到{}条记录", records.size());
+        return records;
     }
 
     private boolean isRealBrowserBinary(Path p) {
@@ -519,6 +561,76 @@ public class FedexRyfService {
             "/usr/bin/chromium-browser",
             "/snap/bin/chromium",
     };
+
+    private void clickFuelSurchargeDropdown(Page page) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<String> result = (List<String>) page.evaluate(
+                    "() => {"
+                    + "const headingKeywords = ["
+                    + "  'FedEx package and air freight fuel surcharge rates',"
+                    + "  'FedEx package and express freight fuel surcharge rates',"
+                    + "  'fuel surcharge rates'"
+                    + "];"
+                    + "const allElements = document.querySelectorAll('h1,h2,h3,h4,h5,h6,h7,p,div,span,strong,b,[class*=title],[class*=heading],[class*=headline]');"
+                    + "let targetHeading = null;"
+                    + "for (const el of allElements) {"
+                    + "  const text = (el.textContent || '').trim();"
+                    + "  if (!text) continue;"
+                    + "  if (text.toLowerCase().includes('fedex') && text.toLowerCase().includes('fuel surcharge')) {"
+                    + "    targetHeading = el;"
+                    + "    break;"
+                    + "  }"
+                    + "}"
+                    + "if (!targetHeading) return ['HEADING_NOT_FOUND'];"
+                    + "const results = ['FOUND_HEADING: ' + (targetHeading.textContent || '').substring(0, 100)];"
+                    + ""
+                    + "const findAndClick = (container) => {"
+                    + "  const selectors = ['button', 'a[role=\"button\"]', '[class*=dropdown]', '[class*=toggle]', '[class*=expand]', '[class*=accordion]', '[aria-expanded]'];"
+                    + "  for (const sel of selectors) {"
+                    + "    const btns = container.querySelectorAll(sel);"
+                    + "    for (const btn of btns) {"
+                    + "      const txt = (btn.textContent || '').trim();"
+                    + "      const aria = btn.getAttribute('aria-expanded');"
+                    + "      const cls = (btn.className || '').toLowerCase();"
+                    + "      const isExpanded = aria === 'true' || cls.includes('open') || cls.includes('expanded') || cls.includes('active');"
+                    + "      const hasChevron = btn.querySelector('[class*=chev], [class*=arrow], [class*=caret], svg');"
+                    + "      if (!isExpanded && (txt.length < 50 || hasChevron || aria !== null)) {"
+                    + "        btn.click();"
+                    + "        results.push('CLICKED: ' + (txt.substring(0, 50) || sel));"
+                    + "        return true;"
+                    + "      }"
+                    + "    }"
+                    + "  }"
+                    + "  return false;"
+                    + "};"
+                    + ""
+                    + "let searchRoot = targetHeading.parentElement;"
+                    + "for (let level = 0; level < 5 && searchRoot; level++) {"
+                    + "  if (findAndClick(searchRoot)) return results;"
+                    + "  searchRoot = searchRoot.parentElement;"
+                    + "}"
+                    + ""
+                    + "if (!results.find(r => r.startsWith('CLICKED'))) {"
+                    + "  const siblings = targetHeading.parentElement ? targetHeading.parentElement.querySelectorAll('button, [class*=dropdown], [class*=toggle], [aria-expanded]') : [];"
+                    + "  for (const btn of siblings) {"
+                    + "    const aria = btn.getAttribute('aria-expanded');"
+                    + "    if (aria === 'false' || aria === null) {"
+                    + "      btn.click();"
+                    + "      results.push('CLICKED_SIBLING: ' + ((btn.textContent || '').trim()).substring(0, 50));"
+                    + "      return results;"
+                    + "    }"
+                    + "  }"
+                    + "}"
+                    + "results.push('NO_BUTTON_CLICKED');"
+                    + "return results;"
+                    + "}"
+            );
+            log.info("下拉按钮搜索结果: {}", result);
+        } catch (Exception e) {
+            log.warn("点击燃油附加费下拉按钮失败: {}", e.getMessage());
+        }
+    }
 
     private void clickShowMore(Page page) {
         try {
@@ -1046,6 +1158,9 @@ public class FedexRyfService {
                     .setWaitUntil(WaitUntilState.LOAD));
             log.info("页面导航完成, 当前URL: {}", page.url());
             page.waitForTimeout(5000);
+
+            clickFuelSurchargeDropdown(page);
+            page.waitForTimeout(2000);
 
             // 先获取页面上所有可能的标题文本，用于调试
             @SuppressWarnings("unchecked")
