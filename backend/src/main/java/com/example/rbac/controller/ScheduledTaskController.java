@@ -3,6 +3,7 @@ package com.example.rbac.controller;
 import com.example.rbac.common.Result;
 import com.example.rbac.dto.ScheduledTaskVO;
 import com.example.rbac.security.UserPermissionCache;
+import com.example.rbac.service.FedexRyfService;
 import com.example.rbac.service.OnTracRyfService;
 import com.example.rbac.service.RyfRecordSyncService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,12 +30,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ScheduledTaskController {
 
     private final OnTracRyfService onTracRyfService;
+    private final FedexRyfService fedexRyfService;
     private final RyfRecordSyncService ryfRecordSyncService;
     private final UserPermissionCache userPermissionCache;
 
     private final Map<String, ScheduledTaskVO> taskExecutionMap = new ConcurrentHashMap<>();
 
     private static final String TASK_ONTRAC_SYNC = "ontrac-sync";
+    private static final String TASK_FEDEX_SYNC = "fedex-sync";
     private static final String TASK_RYF_RECORD_SYNC = "ryf-record-sync";
     private static final String TASK_CACHE_CLEAN = "cache-clean";
 
@@ -47,6 +50,14 @@ public class ScheduledTaskController {
                 .cronExpression("0 0 9 * * 3")
                 .cronDescription("每周三上午9:00执行，抓取OnTrac官网燃油附加费数据并写入ontrac_ryf表")
                 .serviceName("OnTracRyfService.scheduledSyncSurchargeData")
+                .build());
+
+        tasks.add(ScheduledTaskVO.builder()
+                .taskKey(TASK_FEDEX_SYNC)
+                .taskName("FedEx燃油附加费同步")
+                .cronExpression("0 0 9 * * 1")
+                .cronDescription("每周一上午9:00执行，抓取FedEx官网燃油附加费数据并写入fedex_ryf表")
+                .serviceName("FedexRyfService.scheduledSyncSurchargeData")
                 .build());
 
         tasks.add(ScheduledTaskVO.builder()
@@ -91,6 +102,14 @@ public class ScheduledTaskController {
         });
     }
 
+    @Operation(summary = "手动执行FedEx燃油附加费同步")
+    @PostMapping("/execute/fedex-sync")
+    public Result<ScheduledTaskVO> executeFedexSync() {
+        return executeTask(TASK_FEDEX_SYNC, () -> {
+            fedexRyfService.scheduledSyncSurchargeData();
+        });
+    }
+
     @Operation(summary = "手动执行RYF费率记录同步")
     @PostMapping("/execute/ryf-record-sync")
     public Result<ScheduledTaskVO> executeRyfRecordSync() {
@@ -113,6 +132,8 @@ public class ScheduledTaskController {
         switch (taskKey) {
             case TASK_ONTRAC_SYNC:
                 return executeOnTracSync();
+            case TASK_FEDEX_SYNC:
+                return executeFedexSync();
             case TASK_RYF_RECORD_SYNC:
                 return executeRyfRecordSync();
             case TASK_CACHE_CLEAN:

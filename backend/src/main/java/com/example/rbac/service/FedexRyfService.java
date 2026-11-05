@@ -110,6 +110,64 @@ public class FedexRyfService {
         return upserted;
     }
 
+    private String antiDetectionInitScript() {
+        return "() => {"
+                + "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                + "Object.defineProperty(navigator, 'plugins', {"
+                + "  get: () => Object.assign([1,2,3,4,5], {"
+                + "    item: () => null,"
+                + "    namedItem: () => null,"
+                + "    refresh: () => {}"
+                + "  })"
+                + "});"
+                + "Object.defineProperty(navigator, 'mimeTypes', {"
+                + "  get: () => Object.assign([1,2], {"
+                + "    item: () => null,"
+                + "    namedItem: () => null"
+                + "  })"
+                + "});"
+                + "Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});"
+                + "Object.defineProperty(navigator, 'language', {get: () => 'en-US'});"
+                + "Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});"
+                + "Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});"
+                + "Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});"
+                + "Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 0});"
+                + "window.chrome = {"
+                + "  runtime: {},"
+                + "  loadTimes: function() {},"
+                + "  csi: function() {},"
+                + "  app: {}"
+                + "};"
+                + "const origQuery = window.navigator.permissions.query;"
+                + "window.navigator.permissions.query = (parameters) => ("
+                + "  parameters.name === 'notifications'"
+                + "    ? Promise.resolve({state: Notification.permission, onchange: null})"
+                + "    : origQuery(parameters)"
+                + ");"
+                + "Object.defineProperty(screen, 'availWidth', {get: () => 1920});"
+                + "Object.defineProperty(screen, 'availHeight', {get: () => 1040});"
+                + "Object.defineProperty(screen, 'colorDepth', {get: () => 24});"
+                + "Object.defineProperty(screen, 'pixelDepth', {get: () => 24});"
+                + "Object.defineProperty(window, 'outerWidth', {get: () => 1920});"
+                + "Object.defineProperty(window, 'outerHeight', {get: () => 1080});"
+                + "Object.defineProperty(navigator, 'connection', {"
+                + "  get: () => ({effectiveType: '4g', rtt: 50, downlink: 10, saveData: false, onchange: null})"
+                + "});"
+                + "if (!navigator.getBattery) {"
+                + "  navigator.getBattery = () => Promise.resolve({"
+                + "    charging: true, chargingTime: 0, dischargingTime: Infinity,"
+                + "    level: 1, onchargingchange: null, onlevelchange: null"
+                + "  });"
+                + "}"
+                + "const getParam = WebGLRenderingContext.prototype.getParameter;"
+                + "WebGLRenderingContext.prototype.getParameter = function(p) {"
+                + "  if (p === 37445) return 'Intel Inc.';"
+                + "  if (p === 37446) return 'Intel Iris OpenGL Engine';"
+                + "  return getParam.call(this, p);"
+                + "};"
+                + "}";
+    }
+
     private List<FedexRyf> fetchSurchargeDataViaPlaywright() {
         List<FedexRyf> records = new ArrayList<>();
 
@@ -123,59 +181,20 @@ public class FedexRyfService {
                                     + "Chrome/114.0.0.0 Safari/537.36")
                             .setLocale("en-US")
                             .setViewportSize(1920, 1080)
+                            .setGeolocation(37.7749, -122.4194)
+                            .setTimezoneId("America/Chicago")
+                            .setPermissions(List.of("geolocation"))
             );
 
             Page page = context.newPage();
-            page.setDefaultNavigationTimeout(120_000);
+            page.setDefaultNavigationTimeout(60_000);
 
-            page.addInitScript("() => {"
-                    // 隐藏 webdriver 标记
-                    + "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-                    // 伪造 plugins —— 返回类 PluginArray 对象
-                    + "Object.defineProperty(navigator, 'plugins', {"
-                    + "  get: () => Object.assign([1,2,3,4,5], {"
-                    + "    item: () => null,"
-                    + "    namedItem: () => null,"
-                    + "    refresh: () => {}"
-                    + "  })"
-                    + "});"
-                    // 伪造 mimeTypes
-                    + "Object.defineProperty(navigator, 'mimeTypes', {"
-                    + "  get: () => Object.assign([1,2], {"
-                    + "    item: () => null,"
-                    + "    namedItem: () => null"
-                    + "  })"
-                    + "});"
-                    // 语言
-                    + "Object.defineProperty(navigator, 'languages', {get: () => ['en-US','en']});"
-                    + "Object.defineProperty(navigator, 'language', {get: () => 'en-US'});"
-                    // 硬件并发
-                    + "Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});"
-                    // 平台
-                    + "Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});"
-                    // deviceMemory
-                    + "Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});"
-                    // maxTouchPoints
-                    + "Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 0});"
-                    // chrome 对象
-                    + "window.chrome = {"
-                    + "  runtime: {},"
-                    + "  loadTimes: function() {},"
-                    + "  csi: function() {},"
-                    + "  app: {}"
-                    + "};"
-                    // permissions
-                    + "const origQuery = window.navigator.permissions.query;"
-                    + "window.navigator.permissions.query = (parameters) => ("
-                    + "  parameters.name === 'notifications'"
-                    + "    ? Promise.resolve({state: Notification.permission, onchange: null})"
-                    + "    : origQuery(parameters)"
-                    + ");"
-                    + "}");
+            page.addInitScript(antiDetectionInitScript());
 
             log.info("Playwright导航到: {}", FEDEX_SURCHARGES_PAGE);
             page.navigate(FEDEX_SURCHARGES_PAGE, new Page.NavigateOptions()
-                    .setWaitUntil(WaitUntilState.NETWORKIDLE));
+                    .setWaitUntil(WaitUntilState.LOAD));
+            log.info("页面导航完成, 当前URL: {}", page.url());
             page.waitForTimeout(5000);
 
             String finalUrl = page.url();
@@ -386,8 +405,36 @@ public class FedexRyfService {
                 "--no-pings",
                 "--no-crash-upload",
                 "--disable-infobars",
-                "--window-size=1920,1080"
+                "--window-size=1920,1080",
+                "--disable-features=TranslateUI",
+                "--disable-field-trial-config",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--force-color-profile=srgb",
+                "--disable-features=site-per-process,IsolateOrigins"
         ));
+
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (isWindows) {
+            for (String candidate : AUTO_DETECT_BROWSER_PATHS) {
+                if (isRealBrowserBinary(Path.of(candidate))) {
+                    log.warn("[BROWSER] 使用系统Chrome channel: {}", candidate);
+                    try {
+                        return playwright.chromium().launch(
+                                new BrowserType.LaunchOptions()
+                                        .setChannel("chrome")
+                                        .setHeadless(true)
+                                        .setArgs(args)
+                        );
+                    } catch (Exception e) {
+                        log.warn("[BROWSER] channel('chrome') 失败，回退路径检测: {}", e.getMessage());
+                        break;
+                    }
+                }
+            }
+        }
 
         if (chromiumPath != null && !chromiumPath.isEmpty()) {
             Path cfgPath = Path.of(chromiumPath);
@@ -970,6 +1017,142 @@ public class FedexRyfService {
             return value > 1.0 ? value / 100.0 : value;
         }
         return null;
+    }
+
+    public List<OnTracFuelSurchargeRate> fetchPreviousRatesFromFedex() {
+        List<OnTracFuelSurchargeRate> rates = new ArrayList<>();
+
+        try (Playwright playwright = Playwright.create()) {
+            Browser browser = launchBrowser(playwright);
+
+            BrowserContext context = browser.newContext(
+                    new Browser.NewContextOptions()
+                            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                    + "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                    + "Chrome/114.0.0.0 Safari/537.36")
+                            .setLocale("en-US")
+                            .setViewportSize(1920, 1080)
+                            .setGeolocation(37.7749, -122.4194)
+                            .setTimezoneId("America/Chicago")
+                            .setPermissions(List.of("geolocation"))
+            );
+
+            Page page = context.newPage();
+            page.setDefaultNavigationTimeout(60_000);
+            page.addInitScript(antiDetectionInitScript());
+
+            log.info("Playwright导航到: {}", FEDEX_SURCHARGES_PAGE);
+            page.navigate(FEDEX_SURCHARGES_PAGE, new Page.NavigateOptions()
+                    .setWaitUntil(WaitUntilState.LOAD));
+            log.info("页面导航完成, 当前URL: {}", page.url());
+            page.waitForTimeout(5000);
+
+            // 先获取页面上所有可能的标题文本，用于调试
+            @SuppressWarnings("unchecked")
+            List<String> pageHeadings = (List<String>) page.evaluate(
+                    "() => {"
+                    + "const texts = [];"
+                    + "document.querySelectorAll('h1,h2,h3,h4,h5,h6,[class*=title],[class*=heading],strong,b').forEach(el => {"
+                    + "  const t = (el.textContent || '').trim();"
+                    + "  if (t.length > 10 && t.length < 300) texts.push(t.substring(0, 200));"
+                    + "});"
+                    + "return texts;"
+                    + "}"
+            );
+            log.info("页面上找到的标题文本: {}", pageHeadings);
+
+            @SuppressWarnings("unchecked")
+            List<List<String>> rows = (List<List<String>>) page.evaluate(
+                    "() => {"
+                    + "const results = [];"
+                    + "// 多种关键词匹配策略"
+                    + "const keywords = ["
+                    + "  'Previous FedEx package and express freight fuel surcharge rates',"
+                    + "  'previous fuel surcharge',"
+                    + "  'Previous Fuel Surcharge',"
+                    + "  'historical fuel surcharge',"
+                    + "  'fuel surcharge rates'"
+                    + "];"
+                    + "let targetHeading = null;"
+                    + "const allElements = document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, div, span, strong, b, [class*=title], [class*=heading]');"
+                    + "for (const kw of keywords) {"
+                    + "  for (const el of allElements) {"
+                    + "    const text = (el.textContent || '').toLowerCase().trim();"
+                    + "    if (text.includes(kw.toLowerCase()) && !text.startsWith('current')) {"
+                    + "      targetHeading = el;"
+                    + "      break;"
+                    + "    }"
+                    + "  }"
+                    + "  if (targetHeading) break;"
+                    + "}"
+                    + "if (!targetHeading) {"
+                    + "  // fallback: 直接查找包含日期范围和百分比格式的第一个表格"
+                    + "  const tables = document.querySelectorAll('table');"
+                    + "  for (const table of tables) {"
+                    + "    const text = (table.textContent || '');"
+                    + "    if (/\\d{1,2}\\/\\d{1,2}\\/\\d{4}/.test(text) && /\\d+\\.?\\d*\\s*%/.test(text)) {"
+                    + "      const trs = table.querySelectorAll('tr');"
+                    + "      for (const tr of trs) {"
+                    + "        const cells = tr.querySelectorAll('td, th');"
+                    + "        if (cells.length >= 2) {"
+                    + "          const row = [];"
+                    + "          for (const td of cells) row.push((td.textContent || '').trim());"
+                    + "          results.push(row);"
+                    + "        }"
+                    + "      }"
+                    + "      if (results.length > 0) return results;"
+                    + "    }"
+                    + "  }"
+                    + "  return results;"
+                    + "}"
+                    + "// 从找到的标题向下查找表格"
+                    + "let current = targetHeading;"
+                    + "const maxDepth = 30;"
+                    + "for (let i = 0; i < maxDepth; i++) {"
+                    + "  if (current.nextElementSibling) {"
+                    + "    current = current.nextElementSibling;"
+                    + "  } else if (current.parentElement && current.parentElement.nextElementSibling) {"
+                    + "    current = current.parentElement.nextElementSibling;"
+                    + "  } else {"
+                    + "    break;"
+                    + "  }"
+                    + "  const table = current.tagName === 'TABLE' ? current : current.querySelector('table');"
+                    + "  if (table) {"
+                    + "    const trs = table.querySelectorAll('tr');"
+                    + "    for (const tr of trs) {"
+                    + "      const cells = tr.querySelectorAll('td, th');"
+                    + "      if (cells.length >= 2) {"
+                    + "        const row = [];"
+                    + "        for (const td of cells) row.push((td.textContent || '').trim());"
+                    + "        results.push(row);"
+                    + "      }"
+                    + "    }"
+                    + "    break;"
+                    + "  }"
+                    + "}"
+                    + "return results;"
+                    + "}"
+            );
+
+            log.info("从FedEx页面提取到 {} 行数据", rows != null ? rows.size() : 0);
+
+            if (rows != null) {
+                for (List<String> row : rows) {
+                    FedexRyf record = parseRateRow(row);
+                    if (record != null) {
+                        rates.add(new OnTracFuelSurchargeRate(
+                                record.getStart(), record.getEnd(), record.getRate()));
+                    }
+                }
+            }
+
+            context.close();
+        } catch (Exception e) {
+            log.error("获取FedEx历史费率失败", e);
+            throw new RuntimeException("获取FedEx历史费率失败: " + e.getMessage(), e);
+        }
+
+        return rates;
     }
 
     public List<OnTracFuelSurchargeRate> queryAllRates() {

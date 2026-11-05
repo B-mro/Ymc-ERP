@@ -23,34 +23,28 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FedexSurchargeController {
 
+    private final FedexRyfService fedexRyfService;
+
     private static final String FEDEX_SURCHARGE_URL =
             "https://www.fedex.com/en-us/shipping/historical-fuel-surcharge.html";
 
     private static final String SERIES = "FedEx Fuel Surcharge";
 
-    private final FedexRyfService fedexRyfService;
-
     @Operation(summary = "查询FedEx燃油附加费历史")
     @GetMapping("/surcharge/weekly")
     public Result<OnTracFuelSurchargeResponse> getWeeklySurcharge(
             @RequestParam(required = false) String date) {
-        try {
-            OffsetDateTime fetchedAt = OffsetDateTime.now();
+        OffsetDateTime fetchedAt = OffsetDateTime.now();
 
-            List<OnTracFuelSurchargeRate> rates = fedexRyfService.queryAllRates();
+        List<OnTracFuelSurchargeRate> rates = fedexRyfService.queryAllRates();
 
-            OnTracFuelSurchargeResponse response = new OnTracFuelSurchargeResponse();
-            response.setSource(FEDEX_SURCHARGE_URL);
-            response.setSeries(SERIES);
-            response.setFetchedAt(fetchedAt.toString());
-            response.setRates(rates);
+        OnTracFuelSurchargeResponse response = new OnTracFuelSurchargeResponse();
+        response.setSource(FEDEX_SURCHARGE_URL);
+        response.setSeries(SERIES);
+        response.setFetchedAt(fetchedAt.toString());
+        response.setRates(rates);
 
-            log.info("查询FedEx燃油附加费历史数据，共{}条记录", rates.size());
-            return Result.ok(response);
-        } catch (Exception e) {
-            log.error("获取FedEx燃油附加费失败", e);
-            return Result.fail("获取FedEx附加费失败: " + e.getMessage());
-        }
+        return Result.ok(response);
     }
 
     @Operation(summary = "同步FedEx燃油附加费数据到fedex_ryf表")
@@ -63,5 +57,22 @@ public class FedexSurchargeController {
             log.error("同步FedEx燃油附加费数据失败", e);
             return Result.fail("同步失败: " + e.getMessage());
         }
+    }
+
+    @Operation(summary = "查询FedEx官网历史燃油附加费（Previous Rates表格）")
+    @GetMapping("/surcharge/previous")
+    public Result<OnTracFuelSurchargeResponse> getPreviousSurcharge() {
+        OffsetDateTime fetchedAt = OffsetDateTime.now();
+
+        List<OnTracFuelSurchargeRate> rates = fedexRyfService.fetchPreviousRatesFromFedex();
+
+        OnTracFuelSurchargeResponse response = new OnTracFuelSurchargeResponse();
+        response.setSource(FEDEX_SURCHARGE_URL);
+        response.setSeries(SERIES);
+        response.setFetchedAt(fetchedAt.toString());
+        response.setRates(rates);
+
+        log.info("查询FedEx官网历史费率，共{}条记录", rates.size());
+        return Result.ok(response);
     }
 }
