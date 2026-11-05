@@ -56,7 +56,6 @@ function onIframeLoad() {
     resizeObserver.observe(doc.documentElement)
     resizeObserver.observe(doc.body)
   } catch {
-    // cross-origin or other error — fall back to periodic polling
     const poll = window.setInterval(() => {
       adjustHeight()
       if (!iframeRef.value) window.clearInterval(poll)

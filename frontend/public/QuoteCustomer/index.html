@@ -2105,7 +2105,8 @@
 			 * vue v3.5.22
 			 * (c) 2018-present Yuxi (Evan) You and Vue contributors
 			 * @license MIT
-			 **/ var Vue = (function (e) {
+			 **/ 
+			 var Vue = (function (e) {
 				"use strict";
 				var t, n, r;
 				let i, l, s, o, a, c, u, d, p, h, f, m, g;
@@ -53424,7 +53425,7 @@
 				},
 			};
 		</script>
-		//
+		 
 		<script>
 			// 	globalThis.ShipGridFuelRates = {
 			// 		source: "https://www.ontrac.com/surchargesandrates/",
@@ -54381,7 +54382,6 @@
 						}
 					}
 					async function refreshFuel() {
-						console.log("OnTrac的生成账单按钮1");
 						fuelRefreshing.value = true;
 						try {
 							if (location.protocol === "file:")
@@ -54392,7 +54392,6 @@
 								method: "GET",
 							});
 							const awaidata = await response.json();
-							console.log("OnTrac的燃油附加费", awaidata);
 							const data = awaidata.data;
 							if (!response.ok) throw Error(data.error || "抓取失败");
 							if (
@@ -62151,6 +62150,7 @@
 						).trim(),
 					});
 				function match(rules, carrier, g) {
+				 
 					const c = identity(g),
 						scope = rules.filter((r) => r.carrier === carrier),
 						ids = c.id
@@ -62164,11 +62164,13 @@
 										r.customerName && norm(r.customerName) === norm(c.name),
 								)
 							: [];
+
 					if (ids.length > 1 || names.length > 1)
 						throw Error("客户报价匹配规则重复：" + c.id + " / " + c.name);
 					if (ids.length && names.length && ids[0].quoteId !== names[0].quoteId)
 						throw Error("客户ID与名称匹配到不同报价，请修正规则");
 					const r = ids[0] || names[0];
+
 					if (!r) throw Error("未配置客户报价：" + c.id + " / " + c.name);
 					return r;
 				}
@@ -62518,7 +62520,7 @@
 				const host = document.createElement("div");
 				host.id = "quote-manager";
 				document.body.appendChild(host);
-				host.innerHTML = `<div v-if="opened" class="quote-overlay"><section class="quote-window" role="dialog" aria-modal="true" aria-label="固定报价与客户匹配管理"><div class="section-heading"><h2>固定报价与客户匹配管理</h2><button @click="opened=false">关闭</button></div><p>支持公司服务器共享或本地浏览器保存。共享模式下上传报价、客户资料及匹配关系会同步保存到服务器；生成账单前自动刷新。</p><div class="action-row"><button @click="backup" :disabled="busy">导出报价与规则备份</button><label class="text-button">恢复备份<input type="file" accept=".json" @change="restore" :disabled="busy"></label></div><p v-if="message" class="notice">{{message}}</p><p v-if="error||store.error" class="error">{{error||store.error}}</p><p class="notice">当前保存位置：{{sharing.enabled?'公司共享服务器':sharing.mode==='files'?'客户与匹配保存在本机；固定价表来自文件接口':'本机浏览器'}}。共享服务器单份报价上限20MB；本地上限200MB。</p><h3>客户资料（录入后可下拉选择）</h3><div class="select-grid"><label>客户ID<input v-model="customerForm.customerId" placeholder="与GTS客户ID一致，保留开头的0" :disabled="busy"></label><label>客户名称<input v-model="customerForm.customerName" placeholder="真实客户名称" :disabled="busy"></label></div><button @click="saveCustomer" :disabled="busy">{{customerForm.id?'保存客户修改':'保存客户资料'}}</button><button v-if="customerForm.id" @click="resetCustomer" :disabled="busy">取消编辑</button><div class="table-scroll"><table><thead><tr><th>客户ID</th><th>客户名称</th><th>操作</th></tr></thead><tbody><tr v-for="c in store.customers" :key="c.id"><td>{{c.customerId}}</td><td>{{c.customerName}}</td><td><button @click="editCustomer(c)" :disabled="busy">编辑客户</button></td></tr></tbody></table></div>
+				host.innerHTML = `<div v-if="opened" class="quote-overlay" @click.self="opened=false"><section class="quote-window" role="dialog" aria-modal="true" aria-label="固定报价与客户匹配管理"><div class="section-heading"><h2>固定报价与客户匹配管理</h2><button @click="opened=false">关闭</button></div><p>支持公司服务器共享或本地浏览器保存。共享模式下上传报价、客户资料及匹配关系会同步保存到服务器；生成账单前自动刷新。</p><div class="action-row"><button @click="backup" :disabled="busy">导出报价与规则备份</button><label class="text-button">恢复备份<input type="file" accept=".json" @change="restore" :disabled="busy"></label></div><p v-if="message" class="notice">{{message}}</p><p v-if="error||store.error" class="error">{{error||store.error}}</p><p class="notice">当前保存位置：{{sharing.enabled?'公司共享服务器':sharing.mode==='files'?'客户与匹配保存在本机；固定价表来自文件接口':'本机浏览器'}}。共享服务器单份报价上限20MB；本地上限200MB。</p><h3>客户资料（录入后可下拉选择）</h3><div class="select-grid"><label>客户ID<input v-model="customerForm.customerId" placeholder="与GTS客户ID一致，保留开头的0" :disabled="busy"></label><label>客户名称<input v-model="customerForm.customerName" placeholder="真实客户名称" :disabled="busy"></label></div><button @click="saveCustomer" :disabled="busy">{{customerForm.id?'保存客户修改':'保存客户资料'}}</button><button v-if="customerForm.id" @click="resetCustomer" :disabled="busy">取消编辑</button><div class="table-scroll"><table><thead><tr><th>客户ID</th><th>客户名称</th><th>操作</th></tr></thead><tbody><tr v-for="c in store.customers" :key="c.id"><td>{{c.customerId}}</td><td>{{c.customerName}}</td><td><button @click="editCustomer(c)" :disabled="busy">编辑客户</button></td></tr></tbody></table></div>
 <h3>Excel批量导入客户与报价匹配</h3><div class="action-row"><button @click="downloadMappingTemplate" :disabled="busy">下载Excel匹配模板</button><label class="text-button">导入Excel匹配表<input type="file" accept=".xlsx,.xls" @change="importMappings" :disabled="busy"></label></div><p>先上传报价，再填写承运商、客户ID、客户名称、报价名称。导入会保存新客户、更新相同客户的匹配；任何一行有错均不写入。</p><h3>上传固定报价表（数量不限）</h3><p><button @click="downloadStandard" :disabled="busy">下载所选承运商标准价表</button> 已保存报价可逐份下载为标准格式，再修改后替换上传。</p><div class="quote-direct-upload"><div class="select-grid"><label>承运商<select v-model="newCarrier" :disabled="busy"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>上传后绑定客户（可选，仅单份报价）<select v-model="uploadCustomer" :disabled="busy"><option value="">仅保存报价，稍后匹配客户</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>报价名称（可选，单份上传时使用）<input v-model="newName" :disabled="busy" placeholder="不填则使用文件名"></label></div><button class="primary" @click="$refs.fixedQuoteUpload.click()" :disabled="busy">{{busy?'正在校验并保存…':'＋ 选择并上传报价表（可多选）'}}</button><input ref="fixedQuoteUpload" class="quote-upload-file" type="file" accept=".xlsx,.xls" multiple @change="uploadNew" :disabled="busy"><p>选择承运商后可一次选择多份Excel，自动校验并保存。OnTrac、FedEx和UPS均不限制报价表数量，单个文件上限200MB。</p></div><h3>已保存报价 · UPS {{store.quotes.filter(q=>q.carrier==='ups'&&q.hasData).length}}份 / OnTrac {{store.quotes.filter(q=>q.carrier==='ontrac'&&q.hasData).length}}份 / FedEx {{store.quotes.filter(q=>q.carrier==='fedex'&&q.hasData).length}}份</h3><div class="table-scroll"><table><thead><tr><th>承运商</th><th>报价名称</th><th>文件</th><th>操作</th></tr></thead><tbody><tr v-for="q in store.quotes.filter(q=>q.hasData)" :key="q.id"><td>{{q.carrier==='ontrac'?'OnTrac':q.carrier==='ups'?'UPS':'FedEx'}}</td><td><input :value="q.name" @change="rename(q,$event.target.value)" :disabled="busy"></td><td>{{q.fileName||'尚未上传'}}<small v-if="q.updatedAt"> · {{q.updatedAt.slice(0,10)}}</small></td><td><button @click="downloadStandard(q)" :disabled="busy">下载标准价表</button><label class="text-button">{{q.hasData?'替换报价':'上传报价'}}<input type="file" accept=".xlsx,.xls" @change="upload(q,$event)" :disabled="busy"></label></td></tr></tbody></table></div><p v-if="!store.quotes.some(q=>q.hasData)" class="notice">还没有上传固定报价，请使用上方“选择并上传报价表”按钮。</p><h3>客户ID／名称 → 报价表</h3><p>同一客户可分别设置OnTrac、FedEx与UPS报价。ID优先、名称精确匹配；ID与名称指向不同报价时停止该订单出账。可填写真实客户名称，避免把“客服”列当作客户名称。</p><div class="select-grid"><label>选择已保存客户<select v-model="selectedCustomer" @change="selectCustomer"><option value="">选择客户自动填入ID和名称</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>承运商<select v-model="rule.carrier"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>客户ID<input v-model="rule.customerId" placeholder="与GTS客户ID一致"></label><label>客户名称<input v-model="rule.customerName" placeholder="例如 江苏虫洞-SG、NJSD-SG"></label><label>对应报价<select v-model="rule.quoteId"><option value="">请选择</option><option v-for="q in store.quotes.filter(q=>q.carrier===rule.carrier&&q.hasData)" :value="q.id">{{q.name}}</option></select></label><template v-if="rule.carrier==='fedex'"><label>分区来源<select v-model="rule.fedexZone"><option value="spGtsOtherMax">SmartPost按GTS，其他取大（默认）</option><option value="spGtsOtherRaw">SmartPost按GTS，其他按原始</option><option value="raw">全部按原始</option><option value="gts">全部按GTS</option><option value="max">全部原始/GTS取大</option></select></label><label>重量来源<select v-model="rule.fedexWeight"><option value="maximum">原始计费重、GTS实重、GTS体积重取大</option><option value="raw">原始账单计费重</option></select></label><label>GTS实重进位规则<select v-model="rule.fedexPrecision"><option value="ceil">直接向上取整磅</option><option value="two">截取两位小数后向上取整磅</option></select></label></template></div><p v-if="rule.carrier==='fedex'">easyprint：选“SmartPost按GTS，其他按原始”＋“原始账单计费重”；LEQUMOD：可选“截取两位小数后向上取整磅”，例如10.003LB→10LB，10.01LB→11LB。该规则只影响GTS实重，原始计费重与体积重规则不变。附加费仍按尺寸/实重判断，适用最低计费重继续执行。保存后与客户报价匹配一起应用。</p><button @click="saveRule" :disabled="busy">{{rule.id?'保存修改':'保存客户匹配'}}</button><button v-if="rule.id" @click="resetRule">取消编辑</button><div class="table-scroll"><table><thead><tr><th>承运商</th><th>客户ID</th><th>客户名称</th><th>报价</th><th>操作</th></tr></thead><tbody><tr v-for="r in store.rules" :key="r.id"><td>{{r.carrier}}</td><td>{{r.customerId}}</td><td>{{r.customerName}}</td><td>{{quoteName(r.quoteId)}}<small v-if="r.carrier==='fedex'"> · {{policyDescription(r)}}</small></td><td><button @click="edit(r)" :disabled="busy">编辑</button><button @click="remove(r)" :disabled="busy">删除规则</button></td></tr></tbody></table></div></section></div>`;
 				Vue.createApp({
 					setup() {
@@ -63133,7 +63135,6 @@
 					}
 					// OnTrac的点击生成账单按钮
 					async function run() {
-						console.log("第一个点击生成客户账单");
 						busy.value = true;
 						clear();
 						try {
@@ -63753,6 +63754,7 @@
 						)
 							cols[h] = i;
 					});
+
 					const gm = matrix(
 							gtsWb,
 							gtsWb.SheetNames.includes("GTS") ? "GTS" : null,
@@ -63970,6 +63972,7 @@
 									positive(source[cols["Rated Weight Amount"]], "原始计费重") *
 										(bu === "kg" ? kg : 1),
 								);
+
 							const rd = ["Dim Length", "Dim Width", "Dim Height"]
 									.map(
 										(k) =>
@@ -64105,6 +64108,7 @@
 									),
 									os ? 90 : dEligible ? 40 : 0,
 								);
+
 							if (eco) {
 								if (girth > 108) billed = Math.max(billed, 71);
 								else if (girth > 84) billed = Math.max(billed, 20);
@@ -64259,10 +64263,7 @@
 								)
 									throw Error("日期无效，无法确定客户旺季报价");
 							}
-							console.log(
-								"1判断点击生成时，用的是哪一个费率",
-								globalThis.FedExFuel,
-							);
+
 							let reference,
 								method,
 								official = dd
@@ -64270,7 +64271,6 @@
 											(x) => dd >= x.start && dd <= x.end,
 										)
 									: null;
-							console.log(dd, official);
 							if (dd && !official)
 								throw Error("2官方燃油历史未覆盖日期：" + dd);
 							const origFactor = positive(
@@ -64316,6 +64316,7 @@
 							set("Actual Weight Amount", actual);
 							set("Actual Weight Units", "lbs");
 							set("Rated Weight Amount", billed);
+
 							set("Rated Weight Units", "lbs");
 							["Dim Length", "Dim Width", "Dim Height"].forEach((k, i) =>
 								set(k, dims[i]),
@@ -64358,6 +64359,7 @@
 								red.push(cols["Actual Weight Amount"]);
 							if (choice.source === "原始" && rb > gb && billed === rb)
 								red.push(cols["Rated Weight Amount"]);
+
 							if (choice.source === "原始" && wi.gtsDims)
 								rd.forEach((v, i) => {
 									if (ceil(v) > ceil(gd[i]))
@@ -64815,6 +64817,7 @@
 							continue;
 						records.push({ header: h, top: r.top[i] ?? null, index: i });
 					}
+
 					// Any fee absent from the source's Chinese categories gets its own explicit
 					// Chinese heading; never put it under a different fee's generic slot.
 					for (const k of feeColumns) emit(k);
@@ -65088,7 +65091,6 @@
 						}
 					}
 					async function refreshFuel() {
-					console.log('更新Fedex燃油费')
 						fuelRefreshing.value = true;
 						try {
 							if (location.protocol === "file:")
@@ -65128,9 +65130,6 @@
 					}
 					// Fedex的账单生成按钮
 					async function run() {
-						console.log("1212");
-						console.log("121", globalThis.FedExFuel);
-						console.log("第二个点击生成客户账单");
 						busy.value = true;
 						clear();
 						try {
@@ -79426,8 +79425,6 @@
 							rejectPending(Error("导出已取消；审核结果仍保留"));
 					};
 					async function run(sheets, onProgress, onFile) {
-						console.log("第三个点击生成客户账单");
-
 						if (!root.Worker)
 							throw Error("当前浏览器不支持后台导出，请使用Chrome或Edge");
 						const planned = await plan(sheets, (s) => {
@@ -80095,8 +80092,6 @@
 							}
 						}
 						async function run() {
-							console.log("第四个点击生成客户账单");
-
 							if (exporting.value) return;
 							invalidate();
 							busy.value = true;
@@ -82017,7 +82012,6 @@
 						}
 					}
 					async function refreshFuel() {
-						console.log("OnTrac的生成账单按钮3");
 						fuelRefreshing.value = true;
 						try {
 							const data = await UPSInvoiceFuel.refresh();
@@ -82030,8 +82024,6 @@
 						}
 					}
 					async function run() {
-						console.log("第五个点击生成客户账单");
-
 						busy.value = true;
 						clear();
 						try {
@@ -82760,14 +82752,21 @@
 						pending = null;
 					});
 				}
-				if (document.readyState === "complete" || document.readyState === "interactive") {
+				if (
+					document.readyState === "complete" ||
+					document.readyState === "interactive"
+				) {
 					setTimeout(schedule, 0);
 				} else {
 					window.addEventListener("DOMContentLoaded", schedule, { once: true });
 				}
 				try {
 					const mo = new MutationObserver(schedule);
-					mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+					mo.observe(document.documentElement, {
+						childList: true,
+						subtree: true,
+						characterData: true,
+					});
 				} catch (e) {}
 				try {
 					const ro = new ResizeObserver(schedule);
