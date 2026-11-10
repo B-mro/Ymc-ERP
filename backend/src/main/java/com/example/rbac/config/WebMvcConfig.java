@@ -37,7 +37,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 "/error",
                 "/files/**",
                 "/fedex/**",
-                "/ontrac/**"
+                "/ontrac/**",
+                "/ups/**"
         ));
 
         if (knife4jEnabled) {

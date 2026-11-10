@@ -9,6 +9,7 @@ import com.example.rbac.security.UserPermissionCache;
 import com.example.rbac.service.FedexRyfService;
 import com.example.rbac.service.OnTracRyfService;
 import com.example.rbac.service.RyfRecordSyncService;
+import com.example.rbac.service.UpsRyfService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,12 +37,14 @@ public class ScheduledTaskController {
 
     private final OnTracRyfService onTracRyfService;
     private final FedexRyfService fedexRyfService;
+    private final UpsRyfService upsRyfService;
     private final RyfRecordSyncService ryfRecordSyncService;
     private final UserPermissionCache userPermissionCache;
     private final SysTaskLogMapper sysTaskLogMapper;
 
     private static final String TASK_ONTRAC_SYNC = "ontrac-sync";
     private static final String TASK_FEDEX_SYNC = "fedex-sync";
+    private static final String TASK_UPS_SYNC = "ups-sync";
     private static final String TASK_RYF_RECORD_SYNC = "ryf-record-sync";
     private static final String TASK_CACHE_CLEAN = "cache-clean";
 
@@ -62,6 +65,14 @@ public class ScheduledTaskController {
                 .cronExpression("0 0 9 * * 1")
                 .cronDescription("每周一上午9:00执行，抓取FedEx官网燃油附加费数据并写入fedex_ryf表")
                 .serviceName("FedexRyfService.scheduledSyncSurchargeData")
+                .build());
+
+        tasks.add(ScheduledTaskVO.builder()
+                .taskKey(TASK_UPS_SYNC)
+                .taskName("UPS燃油附加费同步")
+                .cronExpression("0 0 9 * * 2")
+                .cronDescription("每周二上午9:00执行，抓取UPS官网燃油附加费数据并写入ups_ryf表")
+                .serviceName("UpsRyfService.scheduledSyncSurchargeData")
                 .build());
 
         tasks.add(ScheduledTaskVO.builder()
@@ -119,6 +130,14 @@ public class ScheduledTaskController {
         });
     }
 
+    @Operation(summary = "手动执行UPS燃油附加费同步")
+    @PostMapping("/execute/ups-sync")
+    public Result<ScheduledTaskVO> executeUpsSync() {
+        return executeTask(TASK_UPS_SYNC, "1", () -> {
+            upsRyfService.scheduledSyncSurchargeData();
+        });
+    }
+
     @Operation(summary = "手动执行RYF费率记录同步")
     @PostMapping("/execute/ryf-record-sync")
     public Result<ScheduledTaskVO> executeRyfRecordSync() {
@@ -143,6 +162,8 @@ public class ScheduledTaskController {
                 return executeOnTracSync();
             case TASK_FEDEX_SYNC:
                 return executeFedexSync();
+            case TASK_UPS_SYNC:
+                return executeUpsSync();
             case TASK_RYF_RECORD_SYNC:
                 return executeRyfRecordSync();
             case TASK_CACHE_CLEAN:
@@ -185,7 +206,7 @@ public class ScheduledTaskController {
         taskLog.setStartTime(startTime);
         taskLog.setStatus("2");
         sysTaskLogMapper.insert(taskLog);
-        log.info("已写入任务执行日志 taskLogId={}, executor={}", taskLog.getId(), executor);
+        log.info("已写入任务执行日志, taskLogId={}, executor={}", taskLog.getId(), executor);
 
         try {
             log.info("手动触发定时任务: {} ({})", vo.getTaskName(), vo.getTaskKey());

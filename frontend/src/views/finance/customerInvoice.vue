@@ -1,3 +1,33 @@
+<template>
+	<div class="invoice-wrapper">
+		<iframe
+			ref="iframeRef"
+			src="/QuoteCustomer/index.html"
+			frameborder="0"
+			scrolling="auto"
+			class="invoice-frame"
+		>
+		</iframe>
+	</div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive } from "vue";
+</script>
+
+<style scoped>
+.invoice-wrapper {
+	width: 100%;
+  height: 100%;
+}
+
+.invoice-frame {
+	width: 100%;
+  height: 100%;
+	border: 0;
+	display: block;
+}
+</style>
 <!-- <template>
   <div class="invoice-wrapper">
     <iframe
@@ -97,34 +127,3 @@ onBeforeUnmount(() => {
   display: block;
 }
 </style> -->
-
-<template>
-	<div class="invoice-wrapper">
-		<iframe
-			ref="iframeRef"
-			src="/newProject/index.html"
-			frameborder="0"
-			scrolling="auto"
-			class="invoice-frame"
-		>
-		</iframe>
-	</div>
-</template>
-
-<script setup lang="ts">
-import { ref, reactive } from "vue";
-</script>
-
-<style scoped>
-.invoice-wrapper {
-	width: 100%;
-  height: 100%;
-}
-
-.invoice-frame {
-	width: 100%;
-  height: 100%;
-	border: 0;
-	display: block;
-}
-</style>

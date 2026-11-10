@@ -46,5 +46,5 @@ export interface ExcelFileInfo {
 // 	return get<ExcelFileInfo[]>("/excel/files");
 // }
 export function getFileschange() {
-	return get<ExcelFileInfo[]>("/fedex/surcharge/sync");
+	return get<ExcelFileInfo[]>("/ups/surcharge/sync");
 }
