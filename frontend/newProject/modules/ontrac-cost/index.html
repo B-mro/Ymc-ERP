@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<title>ShipGrid · OnTrac A/B成本测算</title>
+		<link rel="stylesheet" href="assets/module.css" />
+	</head>
+	<body>
+		<div id="app" v-cloak>
+			<main>
+				<!-- <header>
+					<div class="crumb">财务 / 成本核算 / OnTrac</div>
+					<div class="header-tag">A / B 双方案</div>
+				</header> -->
+				<section class="hero">
+					<div>
+						<div class="eyebrow">ONTRAC COST COMPARISON</div>
+						<h1>从账单到最低成本</h1>
+						<p>三项重量取大后重算，再比较A、B完整成本。</p>
+					</div>
+					<span class="version">Vue 3 · V3.76</span>
+				</section>
+				<section class="panel">
+					<div class="section-heading">
+						<div>
+							<span class="step">01</span>
+							<h2>导入Excel文件</h2>
+						</div>
+						<span class="muted">支持 .xlsx / .xls，单个文件最大200MB</span>
+					</div>
+					<div class="upload-grid">
+						<label
+							v-for="slot in slots"
+							:key="slot.key"
+							class="upload-card"
+							:class="{loaded:files[slot.key]}"
+							@dragover.prevent
+							@drop.prevent="onDrop($event,slot.key)"
+							><input
+								type="file"
+								accept=".xlsx,.xls"
+								@change="onInput($event,slot.key)"
+								:disabled="busy"
+							/><span class="file-icon">{{files[slot.key]?'✓':'↥'}}</span
+							><strong>{{slot.title}}</strong
+							><span class="file-name"
+								>{{files[slot.key]?.name || '点击选择或拖拽文件'}}</span
+							><small>{{slot.hint}}</small
+							><span v-if="files[slot.key]" class="file-ready"
+								>已读取 {{files[slot.key].sheets.join(' / ')}}</span
+							></label
+						>
+					</div>
+					<p class="muted">
+						已内置A、B成本表，无需上传。GTS重量固定KG，尺寸固定CM；导出转换后的LB和INCH，GTS各项向上取整。
+					</p>
+				</section>
+				<section class="panel">
+					<div class="section-heading">
+						<div>
+							<span class="step">02</span>
+							<h2>确认计算规则</h2>
+						</div>
+						<button class="text-button" @click="settingsOpen=!settingsOpen">
+							{{settingsOpen?'收起参数':'展开参数'}} {{settingsOpen?'−':'+'}}
+						</button>
+					</div>
+					<div class="rule-strip">
+						<span><b>取值</b>尺寸 / 分区沿用取低；计费重三项取大</span
+						><span><b>成本</b>A / B 完整费用取低</span
+						><span><b>燃油</b>Ship Date匹配官网；日期异常倒推</span>
+					</div>
+					<div v-if="settingsOpen" class="settings">
+						<div class="select-grid">
+							<label>GTS重量单位<input value="KG（固定）" disabled /></label
+							><label>GTS尺寸单位<input value="CM（固定）" disabled /></label
+							><label
+								>燃油费率来源<input value="按Ship Date匹配官方费率" disabled
+							/></label>
+						</div>
+						<div class="settings-caption">
+							旺季成本（同时应用A、B；均另计适用燃油）
+						</div>
+						<div class="fee-grid">
+							<label
+								>AHS $<input
+									type="number"
+									min="0"
+									step="0.01"
+									v-model.number="settings.peakAhs" /></label
+							><label
+								>LPS $<input
+									type="number"
+									min="0"
+									step="0.01"
+									v-model.number="settings.peakOs" /></label
+							><label
+								>住宅 $<input
+									type="number"
+									min="0"
+									step="0.01"
+									v-model.number="settings.peakResi" /></label
+							><label
+								>超限 $<input
+									type="number"
+									min="0"
+									step="0.01"
+									v-model.number="settings.peakMax" /></label
+							><label
+								>违规 $<input
+									type="number"
+									min="0"
+									step="0.01"
+									v-model.number="settings.peakUnauthorized"
+							/></label>
+						</div>
+						<div class="select-grid">
+							<label
+								>旺季开始<input
+									type="date"
+									v-model="settings.demandStart" /></label
+							><label
+								>住宅旺季开始<input
+									type="date"
+									v-model="settings.resiStart" /></label
+							><label
+								>旺季结束<input type="date" v-model="settings.demandEnd"
+							/></label>
+						</div>
+					</div>
+					<div class="notice">
+						燃油采用OnTrac官方全国费率，再应用A/B折扣。日期异常使用倒推并标记；正常日期缺少官方费率则进入异常。<button
+							class="text-button"
+							@click="refreshFuel"
+							:disabled="busy||fuelRefreshing"
+						>
+							{{fuelRefreshing?'正在更新…':'更新官网燃油费率'}}
+						</button>
+						<p v-if="fuelMessage">{{fuelMessage}}</p>
+					</div>
+					<div class="action-row">
+						<p>
+							最终计费重：原始/GTS已判定计费重取低；DIM体积重仅参考，不再按40/90LB抬高。超限订单进入人工异常。
+						</p>
+						<button class="primary" :disabled="!ready||busy" @click="calculate">
+							{{busy?'正在计算…':'开始计算　→'}}
+						</button>
+					</div>
+					<div v-if="error" class="error" role="alert">{{error}}</div>
+				</section>
+				<template v-if="result"
+					><section class="stats">
+						<div class="stat">
+							<span>已匹配并测算</span
+							><strong>{{result.summary.priced}}<small>单</small></strong>
+							<div>原始记录 {{result.summary.raw}} 单</div>
+						</div>
+						<div class="stat">
+							<span>最低成本合计</span
+							><strong>${{money(result.summary.total)}}</strong>
+							<div>包含附加费及燃油</div>
+						</div>
+						<div class="stat">
+							<span>A / B 选择</span
+							><strong
+								>{{result.summary.A}}<small> / </small
+								>{{result.summary.B}}</strong
+							>
+							<div>完整成本比较，相同选A</div>
+						</div>
+						<div class="stat warning">
+							<span>需要关注</span
+							><strong
+								>{{result.summary.errors+result.summary.warnings}}<small
+									>项</small
+								></strong
+							>
+							<div>
+								异常 {{result.summary.errors}} · 日期警示
+								{{result.summary.warnings}}
+							</div>
+						</div>
+					</section>
+					<section class="panel results">
+						<div class="section-heading">
+							<div>
+								<span class="step">03</span>
+								<h2>查看与导出结果</h2>
+							</div>
+							<button class="download" :disabled="busy" @click="download">
+								↓　下载Excel
+							</button>
+						</div>
+						<div v-if="result.summary.warnings" class="notice">
+							{{result.summary.warnings}}条日期异常记录已标记。旺季暂按原始收费事件测算，须核实后使用；取低测算差额不等于承运商应退金额。
+						</div>
+						<div class="toolbar">
+							<div class="tabs">
+								<button
+									:class="{selected:tab==='details'}"
+									@click="tab='details';page=1"
+								>
+									订单明细</button
+								><button
+									:class="{selected:tab==='errors'}"
+									@click="tab='errors';page=1"
+								>
+									异常清单 {{result.summary.errors}}
+								</button>
+							</div>
+							<input
+								class="search"
+								v-model="search"
+								placeholder="搜索订单号 / 物流单号"
+								aria-label="搜索订单"
+							/><select v-if="tab==='details'" v-model="filter">
+								<option value="all">全部方案</option>
+								<option value="A">A价</option>
+								<option value="B">B价</option>
+								<option value="warning">日期警示</option>
+							</select>
+						</div>
+						<div class="table-scroll">
+							<table v-if="tab==='details'">
+								<thead>
+									<tr>
+										<th>系统订单号 / 物流单号</th>
+										<th>所选整套尺寸 in</th>
+										<th>体积 in³ / 参考体积重 lb</th>
+										<th>所选实重 lb</th>
+										<th>计费重 lb</th>
+										<th>分区</th>
+										<th>A总成本</th>
+										<th>B总成本</th>
+										<th>较低总成本</th>
+										<th>选用价格</th>
+										<th>状态</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="r in visible" :key="r.row">
+										<td>
+											<strong>{{r.order||'—'}}</strong
+											><small>{{r.tracking}}</small>
+										</td>
+										<td>{{r.dims}}</td>
+										<td>{{r.volume}} / {{r.dimWeight}}</td>
+										<td>{{r.actual}}</td>
+										<td>{{r.billed}}</td>
+										<td>{{r.zone}}</td>
+										<td>${{money(r.A)}}</td>
+										<td>${{money(r.B)}}</td>
+										<td class="best">${{money(r.min)}}</td>
+										<td>
+											<span class="price-tag" :class="r.chosen"
+												>{{r.chosen}}价</span
+											>
+										</td>
+										<td>
+											<span
+												:class="r.warnings?'warning-text':'ok-text'"
+												:title="r.warnings"
+												>{{r.warnings?'日期待确认':'已测算'}}</span
+											>
+										</td>
+									</tr>
+									<tr v-if="!visible.length">
+										<td colspan="11" class="empty">没有符合筛选条件的订单</td>
+									</tr>
+								</tbody>
+							</table>
+							<table v-else>
+								<thead>
+									<tr>
+										<th>原始行号</th>
+										<th>物流单号</th>
+										<th>原因</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="r in visible" :key="r.row">
+										<td>{{r.row}}</td>
+										<td>{{r.tracking}}</td>
+										<td>{{r.reason}}</td>
+									</tr>
+									<tr v-if="!visible.length">
+										<td colspan="3" class="empty">暂无异常记录</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+						<div class="pagination">
+							<span>共 {{filtered.length}} 条 · 每页20条</span>
+							<div>
+								<button :disabled="page<=1" @click="page--">上一页</button
+								><span>{{page}} / {{pages}}</span
+								><button :disabled="page>=pages" @click="page++">下一页</button>
+							</div>
+						</div>
+					</section></template
+				>
+				<section v-else class="empty-state">
+					<span>▤</span>
+					<h3>准备好文件，开始成本测算</h3>
+					<p>结果包含订单取值、A/B完整成本和最优方案，可一键导出Excel。</p>
+				</section>
+				<footer>
+					ShipGrid · 内部成本测算工具　<span
+						>数据保留在当前浏览器页面，刷新后清空。</span
+					>
+				</footer>
+			</main>
+		</div>
+		<script src="config.js"></script>
+		<script src="vendor/vue.global.prod.js"></script>
+		<script src="shared/module-runtime.js"></script>
+		<script src="shared/billing-weight-policy.js"></script>
+		<script src="vendor/xlsx.full.min.js"></script>
+		<script src="data/ontrac-default-rates.js"></script>
+		<script src="data/ontrac-fuel.js"></script>
+		<script src="engine/ontrac-cost.js"></script>
+		<script src="ui/ontrac-cost.js"></script>
+	</body>
+</html>

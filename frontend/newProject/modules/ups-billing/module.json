@@ -1,0 +1,32 @@
+{
+  "id": "ups-billing",
+  "title": "UPS账单生成",
+  "version": "3.76-modular.1",
+  "entry": "index.html",
+  "engineGlobal": "UPSBilling",
+  "engineFile": "engine/ups-billing.js",
+  "loadOrder": [
+    "config.js",
+    "vendor/vue.global.prod.js",
+    "shared/module-runtime.js",
+    "shared/billing-weight-policy.js",
+    "vendor/xlsx.full.min.js",
+    "data/peak-defaults.js",
+    "data/quote-templates.js",
+    "shared/standard-quotes.js",
+    "shared/child-invoice.js",
+    "shared/customer-data.js",
+    "shared/fedex-customer-policy.js",
+    "shared/quote-validators.js",
+    "shared/quote-manager.js",
+    "data/ups-published-bases.js",
+    "data/ups-fuel.js",
+    "shared/ups-fuel-raw-schema.js",
+    "shared/ups-raw-import.js",
+    "engine/ups-billing.js",
+    "ui/ups-billing.js"
+  ],
+  "dependsOnOtherModuleDirectories": false,
+  "sourceVersion": "V3.76",
+  "sourceSHA256": "8f242354828836bcafdbeefb126054b7aab70e7dd69cbbbf916b6ac34af9230e"
+}

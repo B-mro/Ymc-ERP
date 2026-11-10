@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<title>ShipGrid · OnTrac账单生成</title>
+		<link rel="stylesheet" href="assets/module.css" />
+	</head>
+	<body>
+		<div id="billing-app" v-cloak>
+			<main>
+				<!-- <header>
+					<div class="crumb">财务 / 客户账单 / OnTrac</div>
+					<div class="header-tag">原始60列 + 取值追溯</div>
+				</header> -->
+				<section class="hero">
+					<div>
+						<div class="eyebrow">CUSTOMER INVOICE</div>
+						<h1>ontrac账单生成</h1>
+						<p>
+							尺寸整套选取；尺寸整套按等级→基础运费选取，分区固定取子单账单分区代码，按客户报价逐项计费；小体积同样计算体积重。
+						</p>
+					</div>
+					<span class="version">V3.76</span>
+				</section>
+				<section class="panel carrier-template-panel">
+					<div class="section-heading">
+						<h2>OnTrac标准价表下载</h2>
+						<button
+							class="primary"
+							@click="downloadStandardDefault"
+							:disabled="busy"
+						>
+							↓ 下载OnTrac标准价表
+						</button>
+					</div>
+					<p>
+						一张基础费表，1–150LB、2–8区；附加费及旺季参数按OnTrac格式填写。
+					</p>
+					<p class="muted">
+						旺季日期已按OnTrac官网2026/2027美国国内公告预填。填写客户价格后，可作为固定报价或单次特殊报价上传。
+					</p>
+					<button
+						v-if="files.quote||(pricingMode==='fixed'&&selectedQuote)"
+						class="text-button"
+						@click="downloadQuoteTemplate(files.quote)"
+						:disabled="busy"
+					>
+						将当前选择的报价转换为标准价表（保留原金额及日期）
+					</button>
+				</section>
+				<section class="panel">
+					<div class="section-heading">
+						<h2>上传账单、GTS及客户报价</h2>
+						<span class="muted"
+							>计费重=max(原始计费重、GTS实重、GTS尺寸重、适用最低重)</span
+						>
+					</div>
+					<div class="quote-mode">
+						<div class="select-grid">
+							<label
+								>报价使用方式<select v-model="pricingMode" :disabled="busy">
+									<option value="auto">按客户ID／名称自动匹配</option>
+									<option value="fixed">选择一份固定报价（本批统一）</option>
+									<option value="upload">单次上传特殊报价（本批统一）</option>
+								</select></label
+							><label v-if="pricingMode==='fixed'"
+								>固定报价<select v-model="selectedQuote" :disabled="busy">
+									<option value="">请选择已上传报价</option>
+									<option v-for="q in quoteChoices" :value="q.id">
+										{{q.name}}
+									</option>
+								</select></label
+							>
+						</div>
+						<div class="fixed-quote-home">
+							<strong>上传固定报价表（保存后可反复使用，支持多选）</strong
+							><input
+								class="fixed-quote-home-input"
+								type="file"
+								accept=".xlsx,.xls"
+								multiple
+								@change="uploadFixedQuotes"
+								:disabled="busy"
+							/>
+							<p class="muted">
+								选择Excel后自动保存到当前承运商；首次上传后可设置客户对应关系。
+							</p>
+							<button
+								class="primary"
+								@click="openQuoteManager"
+								:disabled="busy"
+							>
+								打开固定报价与客户匹配管理 →</button
+							><span class="muted"
+								>已保存本承运商报价 {{quoteChoices.length}}份</span
+							>
+						</div>
+						<p v-if="pricingMode==='auto'" class="muted">
+							按GTS客户ID／名称逐单匹配报价；未匹配、冲突或缺失报价的订单进入异常，不自动套价。
+						</p>
+						<p v-if="quoteStore.error" class="error">{{quoteStore.error}}</p>
+					</div>
+					<div class="billing-upload-grid">
+						<label
+							v-for="slot in slots.filter(s=>s.key!=='quote'||pricingMode==='upload')"
+							:key="slot.key"
+							class="upload-card"
+							:class="{loaded:files[slot.key]}"
+							@dragover.prevent
+							@drop.prevent="drop($event,slot.key)"
+							><input
+								type="file"
+								accept=".xlsx,.xls"
+								:disabled="busy"
+								@change="input($event,slot.key)"
+							/><span class="file-icon">{{files[slot.key]?'✓':'↥'}}</span
+							><strong>{{slot.title}}</strong
+							><span class="file-name"
+								>{{files[slot.key]?.name||'点击选择或拖拽文件'}}</span
+							><small>{{slot.hint}}</small></label
+						>
+					</div>
+					<p class="notice">
+						{{childStatus}}
+						<button
+							v-if="files.child"
+							class="text-button"
+							@click="removeChild"
+							:disabled="busy"
+						>
+							移除单独上传的子单账单
+						</button>
+					</p>
+					<p v-if="result" class="muted">
+						子单匹配 {{result.summary.childMatched}} 票，补收住宅费
+						{{result.summary.childAdded}} 票；燃油已按补收后的适用基数重算。
+					</p>
+					<div class="notice">
+						可按客户自动选用固定报价；固定选择或特殊上传方式对本批所有客户统一使用该报价。红色数值表示原始数据大于GTS转换值的采用项。附加费明细与Additional
+						Charge1合计不可重复相加。
+					</div>
+					<div class="notice">
+						燃油采用OnTrac官方全国费率，再应用A/B折扣。日期异常使用倒推并标记；正常日期缺少官方费率则进入异常。<button
+							class="text-button"
+							@click="refreshFuel"
+							:disabled="busy||fuelRefreshing"
+						>
+							{{fuelRefreshing?'正在更新…':'更新官网燃油费率'}}
+						</button>
+						<p v-if="fuelMessage">{{fuelMessage}}</p>
+					</div>
+					<div class="action-row">
+						<p>
+							DIM275 · AHS（含非标）最低40LB / LPS最低90LB · Ship
+							Date匹配官网燃油
+						</p>
+						<button class="primary" :disabled="!ready||busy" @click="run">
+							{{busy?'处理中…':'生成客户账单 →'}}
+						</button>
+					</div>
+					<div v-if="error" class="error">{{error}}</div>
+				</section>
+				<template v-if="result"
+					><section class="stats">
+						<div class="stat">
+							<span>成功生成</span
+							><strong>{{result.summary.priced}}<small>单</small></strong>
+							<div>原始 {{result.summary.raw}} 单</div>
+						</div>
+						<div class="stat">
+							<span>客户账单合计</span
+							><strong>${{money(result.summary.total)}}</strong>
+							<div>{{result.customers.length}} 个客户</div>
+						</div>
+						<div class="stat">
+							<span>采用客户报价</span
+							><strong
+								>{{pricingMode==='auto'?'逐单匹配':(result.quote.factor*100)+'%'}}</strong
+							>
+							<div>{{result.quoteName}}</div>
+						</div>
+						<div class="stat warning">
+							<span>待核实</span
+							><strong
+								>{{result.summary.errors+result.summary.warnings}}<small
+									>项</small
+								></strong
+							>
+							<div>
+								异常 {{result.summary.errors}} · 警示
+								{{result.summary.warnings}}
+							</div>
+						</div>
+					</section>
+					<section class="panel">
+						<div class="section-heading">
+							<h2>客户账单明细</h2>
+							<button class="download" :disabled="busy" @click="download">
+								↓ 下载Excel（按所选客户）
+							</button>
+						</div>
+						<div v-if="result.summary.warnings" class="notice">
+							{{result.summary.warnings}}单含日期或收费原因警示，相关金额为测算，出账前需核实。
+						</div>
+						<div class="toolbar">
+							<select v-model="customer">
+								<option value="all">全部客户</option>
+								<option v-for="c in result.customers" :value="c.id">
+									{{c.id}} · {{c.name}} · {{c.orders}}单
+								</option></select
+							><input
+								class="search"
+								v-model="search"
+								placeholder="搜索系统订单号 / 物流单号"
+							/><label
+								><input
+									type="checkbox"
+									v-model="showAll"
+								/>显示全部原始列及追溯数据</label
+							>
+						</div>
+						<div class="table-scroll">
+							<table>
+								<thead>
+									<tr>
+										<th v-for="c in columns">{{c.h}}</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="r in visible" :key="r.tracking">
+										<td
+											v-for="c in columns"
+											:class="{'source-red':r.red.includes(c.i),'best':c.h==='TotalCharge'}"
+										>
+											{{display(r.data[c.i])}}
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+						<div class="pagination">
+							<span
+								>当前筛选 {{filtered.length}}单 ·
+								${{money(selectionTotal)}}（导出含所选客户全部订单，不受搜索影响）</span
+							>
+							<div>
+								<button :disabled="page<=1" @click="page--">上一页</button
+								>{{page}} / {{pages}}<button
+									:disabled="page>=pages"
+									@click="page++"
+								>
+									下一页
+								</button>
+							</div>
+						</div>
+					</section>
+					<section v-if="result.errors.length" class="panel">
+						<h2>未生成账单的异常订单</h2>
+						<div class="table-scroll">
+							<table>
+								<thead>
+									<tr>
+										<th>原始行号</th>
+										<th>物流单号</th>
+										<th>客户ID</th>
+										<th>原因</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="e in result.errors">
+										<td>{{e.row}}</td>
+										<td>{{e.tracking}}</td>
+										<td>{{e.customerId}}</td>
+										<td>{{e.reason}}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</section></template
+				>
+				<section v-else class="empty-state">
+					<span>▤</span>
+					<h3>上传文件，生成逐项收费账单</h3>
+					<p>保留OnTrac原始账单字段，增加取值来源和燃油依据。</p>
+				</section>
+			</main>
+		</div>
+		<script src="config.js"></script>
+		<script src="vendor/vue.global.prod.js"></script>
+		<script src="shared/module-runtime.js"></script>
+		<script src="shared/billing-weight-policy.js"></script>
+		<script src="vendor/xlsx.full.min.js"></script>
+		<script src="data/ontrac-default-rates.js"></script>
+		<script src="data/ontrac-fuel.js"></script>
+		<script src="engine/ontrac-cost.js"></script>
+		<script src="data/peak-defaults.js"></script>
+		<script src="data/quote-templates.js"></script>
+		<script src="shared/standard-quotes.js"></script>
+		<script src="shared/child-invoice.js"></script>
+		<script src="shared/customer-data.js"></script>
+		<script src="shared/fedex-customer-policy.js"></script>
+		<script src="shared/quote-validators.js"></script>
+		<script src="shared/quote-manager.js"></script>
+		<script src="engine/ontrac-billing.js"></script>
+		<script src="ui/ontrac-billing.js"></script>
+	</body>
+</html>

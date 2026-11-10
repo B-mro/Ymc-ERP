@@ -43886,6 +43886,7 @@
 					'<html><head><meta charset="utf-8"/><title>SheetJS Table Export</title></head><body>';
 				var Eb = "</body></html>";
 				function Cb(e, r) {
+
 					var t = Vr(e, "table");
 					if (!t || t.length == 0)
 						throw new Error("Invalid HTML: could not find <table>");
@@ -60671,7 +60672,6 @@
 								"No Release",
 								"Unauthorized Package",
 								"Rebill Fee",
-								"Reserved",
 							].filter((k) => n(r[k]) !== 0);
 							if (unpriced.length)
 								throw Error("未映射费用需人工确认：" + unpriced.join(","));
@@ -60876,6 +60876,7 @@
 							fees["Peak Add Handling"] = round(peaks.ahs);
 							fees["Peak Oversize"] = round(peaks.os);
 							fees["Peak Residential"] = round(peaks.resi);
+							fees["Reserved"] = round(n(r["Reserved"]));
 							const pricePolicy = root.ShipGridWeightPolicy.price(
 								t.base,
 								z,
@@ -61927,6 +61928,13 @@
 							"/quotes/" + encodeURIComponent(key) + "/file",
 							{ binary: true },
 						);
+						const head = new Uint8Array(
+							data,
+							0,
+							Math.min(4, data.byteLength),
+						);
+						if (head[0] === 60)
+							throw Error("服务器返回的不是Excel文件（疑似HTML错误页）");
 						state.statuses[key] = "已读取";
 						return { ...item, data };
 					} catch (e) {
@@ -61984,11 +61992,18 @@
 						if (!r.ok) throw Error("HTTP " + r.status);
 						const data = await r.arrayBuffer();
 						if (data.byteLength > 20 * 1024 * 1024) throw Error("文件超过20MB");
+						const head = new Uint8Array(data, 0, Math.min(4, data.byteLength));
+						if (head[0] === 60)
+							throw Error(
+								"服务器返回的不是Excel文件（疑似HTML错误页），请检查文件链接或跨域配置",
+							);
 						state.statuses[q.id] = "已读取";
 						return { ...q, data };
 					} catch (e) {
 						const message =
-							"固定文件读取失败。请连接共享服务器，或由服务器为文件目录配置跨域访问。";
+							e instanceof TypeError
+								? "固定文件读取失败。请连接共享服务器，或由服务器为文件目录配置跨域访问。"
+								: e.message;
 						state.statuses[q.id] = message;
 						throw Error(q.fileName + "：" + message);
 					} finally {
@@ -62448,11 +62463,21 @@
 						for (const id of ids) {
 							const q = await read("quotes", id);
 							if (!q || q.carrier !== carrier || !q.data) continue;
-							const parsed = XLSX.read(q.data, {
-								type: "array",
-								cellDates: false,
-								dense: true,
-							});
+							let parsed;
+							try {
+								parsed = XLSX.read(q.data, {
+									type: "array",
+									cellDates: false,
+									dense: true,
+								});
+							} catch (e) {
+								throw Error(
+									"报价「" +
+										(q.name || q.fileName || id) +
+										"」解析失败：" +
+										e.message,
+								);
+							}
 							validateQuote(parsed, carrier);
 							entries.set(id, { ...q, wb: Vue.markRaw(parsed) });
 						}
@@ -64272,7 +64297,7 @@
 										)
 									: null;
 							if (dd && !official)
-								throw Error("2官方燃油历史未覆盖日期：" + dd);
+								throw Error("官方燃油历史未覆盖日期：" + dd);
 							const origFactor = positive(
 								settings.originalFuelFactor,
 								"原始账户燃油支付比例",

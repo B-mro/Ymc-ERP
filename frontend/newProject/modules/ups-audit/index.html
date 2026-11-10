@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<title>ShipGrid · UPS账单审核</title>
+		<link rel="stylesheet" href="assets/module.css" />
+	</head>
+	<body>
+		<nav class="module-switch">
+			<button id="ups-mode">UPS账单审核</button>
+		</nav>
+		<script src="config.js"></script>
+		<script src="vendor/vue.global.prod.js"></script>
+		<script src="shared/module-runtime.js"></script>
+		<script src="shared/billing-weight-policy.js"></script>
+		<script src="vendor/xlsx.full.min.js"></script>
+		<script src="data/ups-published-bases.js"></script>
+		<script src="data/ups-fuel.js"></script>
+		<script src="shared/ups-fuel-raw-schema.js"></script>
+		<script src="shared/ups-raw-import.js"></script>
+		<script src="engine/ups-contract.js"></script>
+		<script src="data/ups-report-layout.js"></script>
+		<script src="engine/ups-correction-audit.js"></script>
+		<script src="shared/dispute-reasons.js"></script>
+		<script src="engine/ups-shipment-review.js"></script>
+		<script src="engine/ups-ground-net.js"></script>
+		<script src="engine/ups-adjustments.js"></script>
+		<script src="engine/ups-returns.js"></script>
+		<script src="data/ups-dispute-style.js"></script>
+		<script src="engine/ups-dispute-export.js"></script>
+		<script src="vendor/xlsx-worker-source.js"></script>
+		<script src="shared/audit-csv-export.js"></script>
+		<script src="shared/audit-xlsx-export.js"></script>
+		<script src="ui/ups-audit.js"></script>
+		<script src="shared/ups-history.js"></script>
+		<script src="shared/audit-memory.js"></script>
+		<script src="engine/ups-174-audit.js"></script>
+		<script src="engine/ups-audit-install.js"></script>
+	</body>
+</html>

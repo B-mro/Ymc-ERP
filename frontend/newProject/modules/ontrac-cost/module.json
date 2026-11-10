@@ -1,0 +1,22 @@
+{
+	"id": "ontrac-cost",
+	"title": "OnTrac A/B成本测算",
+	"version": "3.76-modular.1",
+	"entry": "index.html",
+	"engineGlobal": "OnTracEngine",
+	"engineFile": "engine/ontrac-cost.js",
+	"loadOrder": [
+		"config.js",
+		"vendor/vue.global.prod.js",
+		"shared/module-runtime.js",
+		"shared/billing-weight-policy.js",
+		"vendor/xlsx.full.min.js",
+		"data/ontrac-default-rates.js",
+		"data/ontrac-fuel.js",
+		"engine/ontrac-cost.js",
+		"ui/ontrac-cost.js"
+	],
+	"dependsOnOtherModuleDirectories": false,
+	"sourceVersion": "V3.76",
+	"sourceSHA256": "8f242354828836bcafdbeefb126054b7aab70e7dd69cbbbf916b6ac34af9230e"
+}

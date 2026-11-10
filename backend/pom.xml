@@ -118,7 +118,7 @@
     </dependencies>
 
     <build>
-        <finalName>rbac-admin</finalName>
+        <finalName>${custom.finalName}</finalName>
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
@@ -147,6 +147,7 @@
             <id>dev</id>
             <properties>
                 <build.env>dev</build.env>
+                <custom.finalName>ERP-dev</custom.finalName>
             </properties>
             <activation>
                 <activeByDefault>true</activeByDefault>
@@ -156,6 +157,7 @@
             <id>prod</id>
             <properties>
                 <build.env>prod</build.env>
+                <custom.finalName>ERP-prod</custom.finalName>
             </properties>
         </profile>
     </profiles>
