@@ -1,8 +1,16 @@
 <template>
 	<div class="invoice-wrapper">
-		<iframe
+		<!-- <iframe
 			ref="iframeRef"
 			src="/QuoteCustomer/index.html"
+			frameborder="0"
+			scrolling="auto"
+			class="invoice-frame"
+		>
+		</iframe> -->
+    <iframe
+			ref="iframeRef"
+			src="/public/Finance/index.html"
 			frameborder="0"
 			scrolling="auto"
 			class="invoice-frame"

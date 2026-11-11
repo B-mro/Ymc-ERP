@@ -1,0 +1,138 @@
+<!-- <!doctype html>
+<html lang="zh-CN">
+	<meta charset="utf-8" /><title>ShipGrid IT 模块目录</title
+	><style>
+		body {
+			font: 16px Arial;
+			max-width: 800px;
+			margin: 60px auto;
+			line-height: 2;
+		}
+		a {
+			color: #147f70;
+		}
+	</style>
+	<h1>ShipGrid 独立模块 · V3.76</h1>
+	<p>开发交付目录；各模块可独立部署。</p>
+	<ul>
+		<li><a href="modules/ontrac-cost/index.html">OnTrac A/B成本测算</a></li>
+		<li><a href="modules/ontrac-billing/index.html">OnTrac账单生成</a></li>
+		<li><a href="modules/fedex-billing/index.html">FedEx账单生成</a></li>
+		<li><a href="modules/ups-billing/index.html">UPS账单生成</a></li>
+		<li><a href="modules/ups-audit/index.html">UPS账单审核</a></li>
+	</ul>
+</html> -->
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>ShipGrid 财务工具</title>
+	</head>
+	<style>
+		* {
+			box-sizing: border-box;
+		}
+		html,
+		body {
+			margin: 0;
+			padding: 0;
+			height: 100%;
+			width: 100%;
+		}
+		body {
+			background: #f5f7fa;
+			color: #192c3c;
+			font-family: Inter, "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+			font-size: 14px;
+			display: flex;
+			flex-direction: column;
+		}
+		.module-switch {
+			position: sticky;
+			top: 0;
+			z-index: 20;
+			background: #102f29;
+			color: white;
+			height: 60px;
+			display: flex;
+			align-items: center;
+			gap: 16px;
+			padding: 0 28px;
+		}
+		.module-switch strong {
+			margin-right: auto;
+		}
+		.module-switch button {
+			border: 1px solid #688b80;
+			padding: 10px 18px;
+			border-radius: 8px;
+			background: transparent;
+			color: white;
+			cursor: pointer;
+		}
+		.module-switch button.selected {
+			background: #d8eadf;
+			color: #173c32;
+		}
+		.content {
+			width: 100%;
+			height: 100%;
+			background: #0955c8;
+		}
+		.module-content {
+			width: 100%;
+			flex: 1;
+			overflow: hidden;
+		}
+		.module-content iframe {
+			width: 100%;
+			height: 100%;
+			border: none;
+			display: block;
+		}
+	</style>
+	<body>
+		<nav class="module-switch">
+			<strong>ShipGrid 财务工具</strong>
+			<button id="cost-mode" class="selected" onclick="selectBtn(this)">
+				A/B成本 · 取低
+			</button>
+			<button id="fedex-mode" onclick="selectBtn(this)">Fedex账单生成</button>
+			<button id="billing-mode" onclick="selectBtn(this)">
+				ontrac账单生成
+			</button>
+			<button id="ups-billing-mode" onclick="selectBtn(this)">
+				UPS账单生成
+			</button>
+			<button id="ups-mode" onclick="selectBtn(this)">UPS账单审核</button>
+		</nav>
+		<div class="module-content">
+			<iframe id="module-frame" src="modules/ontrac-cost/index.html"></iframe>
+		</div>
+	</body>
+	<script>
+		var buttons = document.querySelectorAll(".module-switch button");
+		var moduleFrame = document.getElementById("module-frame");
+
+		var moduleMap = {
+			"cost-mode": "modules/ontrac-cost/index.html",
+			"fedex-mode": "modules/fedex-billing/index.html",
+			"billing-mode": "modules/ontrac-billing/index.html",
+			"ups-billing-mode": "modules/ups-billing/index.html",
+			"ups-mode": "modules/ups-audit/index.html",
+		};
+
+		function selectBtn(btn) {
+			buttons.forEach(function (b) {
+				b.classList.remove("selected");
+			});
+			btn.classList.add("selected");
+
+			var src = moduleMap[btn.id];
+			if (src) {
+				moduleFrame.src = src;
+			}
+		}
+	</script>
+</html>
