@@ -157,8 +157,7 @@
 		saved = JSON.parse(localStorage.getItem(settingsKey) || "{}");
 	} catch {}
 	const state = Vue.reactive({
-		// mode: saved.mode || (saved.enabled ? "shared" : "local"),
-		mode: "files",
+		mode: saved.mode || (saved.enabled ? "shared" : "local"),
 		enabled: !!saved.enabled,
 		fileApi: saved.fileApi || "http://121.43.236.24/api/excel/files",
 		base:
@@ -271,30 +270,18 @@
 			});
 			if (!r.ok) throw Error("文件列表接口返回HTTP " + r.status);
 			const result = await r.json();
-			let list;
-			if (Array.isArray(result)) list = result;
-			else if (result && result.code === 200 && Array.isArray(result.data))
-				list = result.data;
-			else
+			if (result.code !== 200 || !Array.isArray(result.data))
 				throw Error(
-					result?.msg ||
-						"文件接口返回结构不正确，应为{code:200,data:[文件]}或直接数组",
+					result.msg || "文件接口返回结构不正确，应为{code:200,data:[文件URL]}",
 				);
 			const seen = new Set(),
 				next = [];
-			for (const item of list) {
-				let raw;
-				if (typeof item === "string") raw = item;
-				else if (item && typeof item.fileUrl === "string") raw = item.fileUrl;
-				else throw Error("文件列表含非URL条目");
-				raw = String(raw)
-					.replace(/^`+|`+$/g, "")
-					.trim();
-				if (!raw) throw Error("文件列表含空URL条目");
-				const u = new URL(raw, api.origin);
+			for (const item of result.data) {
+				if (typeof item !== "string") throw Error("文件列表含非URL条目");
+				const u = new URL(item, api.origin);
 				if (
 					u.origin !== api.origin ||
-					!u.pathname.includes("/excel_files/") ||
+					!u.pathname.startsWith("/excel_files/") ||
 					!u.pathname.toLowerCase().endsWith(".xlsx")
 				)
 					throw Error("返回文件地址不属于本服务器Excel目录");

@@ -157,8 +157,7 @@
 		saved = JSON.parse(localStorage.getItem(settingsKey) || "{}");
 	} catch {}
 	const state = Vue.reactive({
-		// mode: saved.mode || (saved.enabled ? "shared" : "local"),
-		mode: "files",
+		mode: saved.mode || (saved.enabled ? "shared" : "local"),
 		enabled: !!saved.enabled,
 		fileApi: saved.fileApi || "http://121.43.236.24/api/excel/files",
 		base:
@@ -271,30 +270,18 @@
 			});
 			if (!r.ok) throw Error("文件列表接口返回HTTP " + r.status);
 			const result = await r.json();
-			let list;
-			if (Array.isArray(result)) list = result;
-			else if (result && result.code === 200 && Array.isArray(result.data))
-				list = result.data;
-			else
+			if (result.code !== 200 || !Array.isArray(result.data))
 				throw Error(
-					result?.msg ||
-						"文件接口返回结构不正确，应为{code:200,data:[文件]}或直接数组",
+					result.msg || "文件接口返回结构不正确，应为{code:200,data:[文件URL]}",
 				);
 			const seen = new Set(),
 				next = [];
-			for (const item of list) {
-				let raw;
-				if (typeof item === "string") raw = item;
-				else if (item && typeof item.fileUrl === "string") raw = item.fileUrl;
-				else throw Error("文件列表含非URL条目");
-				raw = String(raw)
-					.replace(/^`+|`+$/g, "")
-					.trim();
-				if (!raw) throw Error("文件列表含空URL条目");
-				const u = new URL(raw, api.origin);
+			for (const item of result.data) {
+				if (typeof item !== "string") throw Error("文件列表含非URL条目");
+				const u = new URL(item, api.origin);
 				if (
 					u.origin !== api.origin ||
-					!u.pathname.includes("/excel_files/") ||
+					!u.pathname.startsWith("/excel_files/") ||
 					!u.pathname.toLowerCase().endsWith(".xlsx")
 				)
 					throw Error("返回文件地址不属于本服务器Excel目录");
@@ -434,17 +421,17 @@
 				throw Error("服务器地址必须以http://或https://开头");
 			const old = { ...applied };
 			Object.assign(applied, {
-				mode: "files",
-				enabled: false,
+				mode: state.mode,
+				enabled: state.mode === "shared",
 				fileApi: state.fileApi,
 				base: state.base.replace(/\/$/, ""),
 				token: state.token,
 			});
-			state.mode = "files";
 			snapshot = null;
 			state.connected = false;
 			try {
-				await loadFileList();
+				if (applied.enabled) await refresh();
+				else if (applied.mode === "files") await loadFileList();
 			} catch (e) {
 				Object.assign(applied, old);
 				snapshot = null;
@@ -452,20 +439,23 @@
 				state.enabled = old.enabled;
 				throw e;
 			}
-			state.enabled = false;
+			state.enabled = applied.enabled;
 			localStorage.setItem(
 				settingsKey,
 				JSON.stringify({
-					mode: "files",
+					mode: applied.mode,
 					fileApi: applied.fileApi,
-					enabled: false,
+					enabled: applied.enabled,
 					base: applied.base,
 				}),
 			);
 			sessionStorage.setItem("ShipGridSharedToken", applied.token);
 			await root.ShipGridQuoteManager.refresh();
-			state.message =
-				"已接入现有文件接口。价表从服务器读取；客户与匹配仍保存在本机。";
+			state.message = applied.enabled
+				? "已连接共享服务器。报价和客户匹配的修改会保存到服务器。"
+				: applied.mode === "files"
+					? "已接入现有文件接口。价表从服务器读取；客户与匹配仍保存在本机，需部署共享写入服务后才能多人同步。"
+					: "已切换为本地模式。共享服务器数据不会被删除。";
 		});
 	}
 	async function reload() {
@@ -670,18 +660,29 @@
 		});
 	}
 	async function read(name, key) {
-		if (name === "quotes") {
-			if (key !== undefined) {
-				const q = root.ShipGridShared.fixed.find((q) => q.id === key);
-				return q ? root.ShipGridShared.fixedRead(q) : undefined;
-			}
-			return root.ShipGridShared.fixed.map((q) => ({ ...q }));
+		if (root.ShipGridShared.isRemote())
+			return root.ShipGridShared.read(name, key);
+		if (name === "quotes" && key !== undefined) {
+			const local = await localRead(name, key);
+			if (local) return local;
+			const q = root.ShipGridShared.fixed.find((q) => q.id === key);
+			return q ? root.ShipGridShared.fixedRead(q) : undefined;
 		}
-		return localRead(name, key);
+		const result = await localRead(name, key);
+		if (name === "quotes" && key === undefined) {
+			const ids = new Set(result.map((q) => q.id));
+			return result.concat(
+				root.ShipGridShared.fixed.filter((q) => !ids.has(q.id)),
+			);
+		}
+		return result;
 	}
 	async function write(name, value, remove = false) {
-		if (name === "quotes")
-			throw Error("当前模式下报价来自服务器文件接口，无法在本地上传或修改");
+		if (root.ShipGridShared.isRemote()) {
+			await root.ShipGridShared.write(name, value, remove);
+			await refresh();
+			return;
+		}
 		const d = await db();
 		await new Promise((resolve, reject) => {
 			const tx = d.transaction(name, "readwrite");
@@ -711,7 +712,20 @@
 	}
 	async function init() {
 		try {
-			await refresh();
+			if (root.ShipGridShared.isRemote()) {
+				await refresh();
+				return;
+			}
+			let q = await read("quotes");
+			if (!q.length) {
+				const d = await db();
+				await new Promise((resolve, reject) => {
+					const tx = d.transaction("quotes", "readwrite");
+					for (const q of seeds) tx.objectStore("quotes").put(q);
+					tx.oncomplete = resolve;
+					tx.onerror = () => reject(tx.error);
+				});
+			}
 			const existing = await read("customers");
 			if (!existing.length) {
 				const migrated = CustomerData.legacy(
@@ -720,13 +734,17 @@
 				);
 				if (migrated.length) await replaceSets({ customers: migrated });
 			}
+			await refresh();
 		} catch (e) {
 			state.error = e.message;
 		}
 	}
 	async function replaceSets(values) {
-		if (values.quotes)
-			throw Error("当前模式下报价来自服务器文件接口，无法在本地替换");
+		if (root.ShipGridShared.isRemote()) {
+			await root.ShipGridShared.replace(values);
+			await refresh();
+			return;
+		}
 		const d = await db();
 		await new Promise((resolve, reject) => {
 			const tx = d.transaction(Object.keys(values), "readwrite");
@@ -1326,8 +1344,11 @@
 					}
 					const d = await db();
 					await new Promise((resolve, reject) => {
-						const tx = d.transaction(["rules", "customers"], "readwrite");
-						for (const k of ["rules", "customers"]) {
+						const tx = d.transaction(
+							["quotes", "rules", "customers"],
+							"readwrite",
+						);
+						for (const k of ["quotes", "rules", "customers"]) {
 							const s = tx.objectStore(k);
 							s.clear();
 							for (const r of data[k]) s.put(r);

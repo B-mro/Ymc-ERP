@@ -1,0 +1,38 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const blocks=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+for(const b of blocks)new vm.Script(b);
+const block=blocks.find(b=>b.includes('const settingsKey='));
+// Exercise shared client separately from its quote-manager integration.
+const source=block.slice(0,block.indexOf("const norm=v=>"));
+const end=source.lastIndexOf("(function(root){'use strict';");
+const standalone=source.slice(0,end);
+let catalog={revision:0,quotes:[{id:'fixed-1',carrier:'fedex',name:'Quote',fileName:'quote.xlsx',url:'http://121.43.236.24/excel_files/Fedex_2026D.xlsx',source:'fixed-link',hasData:true}],customers:[],rules:[]};
+let calls=[];let appSetup;let reject=false;
+const store=new Map([['ShipGridSharedSettingsV1',JSON.stringify({enabled:true,base:'http://server.test'})]]);
+const ctx={ArrayBuffer,Uint8Array,Event,AbortController,Blob,URL,console,setTimeout,clearTimeout,btoa:s=>Buffer.from(s,'binary').toString('base64'),location:{protocol:'http:',origin:'http://server.test'},localStorage:{getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)},sessionStorage:{getItem:()=> 'read-test',setItem:()=>{}},document:{createElement:()=>({}),body:{appendChild:()=>{}}},Vue:{reactive:x=>x,ref:x=>({value:x}),computed:f=>({get value(){return f();}}),createApp:a=>({mount:()=>{appSetup=a.setup;}})},fetch:async(url,opts)=>{calls.push({url,opts});if(reject)return{ok:false,status:409,json:async()=>({error:'conflict'})};if(opts?.binary||url.endsWith('/file'))return{ok:true,arrayBuffer:async()=>new Uint8Array([1,2,3]).buffer};return{ok:true,json:async()=>catalog};}};
+vm.runInNewContext(standalone,ctx);
+assert.equal(ctx.ShipGridShared.fixed.length,12);
+assert.equal(ctx.ShipGridShared.isRemote(),true);
+await ctx.ShipGridShared.refresh();
+assert.equal(ctx.ShipGridShared.state.revision,0);
+assert.equal((await ctx.ShipGridShared.read('quotes','fixed-1')).data.byteLength,3);
+const wire=ctx.ShipGridShared.wire({...catalog.quotes[0],data:new Uint8Array([1]).buffer});assert.equal(wire.data,undefined);assert.ok(wire.url);
+await ctx.ShipGridShared.write('customers',{id:'one',customerId:'001',customerName:'A'});
+let call=calls.at(-1);assert.equal(call.opts.headers['If-Match'],'0');assert.equal(JSON.parse(call.opts.body).customers[0].customerId,'001');
+reject=true;await assert.rejects(ctx.ShipGridShared.replace({customers:[]}),/conflict/);
+assert.equal(ctx.ShipGridShared.state.revision,0);
+console.log(`${blocks.length} script blocks parse; shared client registry, read, upload revision, fixed-link freshness and conflict tests passed.`);
+// Actual company endpoint shape; same-origin file URL restrictions and failure handling.
+const ctx2={...ctx,localStorage:{getItem:()=>JSON.stringify({mode:'files',fileApi:'http://121.43.236.24/api/excel/files'}),setItem:()=>{}},fetch:async(url,opts)=>({ok:true,json:async()=>({code:200,msg:'操作成功',data:['http://121.43.236.24/excel_files/FEDEX_2026A.xlsx','http://121.43.236.24/excel_files/ONTRAC_RATE_B.xlsx']})})};
+vm.runInNewContext(standalone,ctx2);
+await ctx2.ShipGridShared.loadFileList();
+assert.equal(ctx2.ShipGridShared.isFiles(),true);assert.equal(ctx2.ShipGridShared.isRemote(),false);
+assert.equal(ctx2.ShipGridShared.fixed.length,2);assert.equal(ctx2.ShipGridShared.fixed[0].carrier,'fedex');
+ctx2.fetch=async()=>({ok:true,json:async()=>({code:401,msg:'令牌失效'})});
+await assert.rejects(ctx2.ShipGridShared.loadFileList(),/令牌失效/);assert.equal(ctx2.ShipGridShared.state.connected,false);
+ctx2.fetch=async()=>({ok:true,json:async()=>({code:200,data:['http://untrusted.test/excel_files/a.xlsx']})});
+await assert.rejects(ctx2.ShipGridShared.loadFileList(),/不属于/);
+console.log('Existing /api/excel/files adapter, expired token and cross-origin URL tests passed.');

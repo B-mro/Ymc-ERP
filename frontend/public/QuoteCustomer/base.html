@@ -97,9 +97,9 @@
 				background: #36bda2;
 			}
 			main {
-				/* margin-left: 228px; */
+				margin-left: 228px;
 				padding: 0 40px 24px;
-				/* max-width: 1800px; */
+				max-width: 1800px;
 			}
 			header {
 				height: 76px;
@@ -421,8 +421,6 @@
 			}
 			.table-scroll {
 				overflow-x: auto;
-				overflow-y: auto;
-				max-height: 72vh;
 			}
 			table {
 				border-collapse: collapse;
@@ -1211,6 +1209,7 @@
 				</footer>
 			</main>
 		</div>
+
 		<div id="billing-app" v-cloak style="display: none">
 			<main>
 				<header>
@@ -2105,8 +2104,7 @@
 			 * vue v3.5.22
 			 * (c) 2018-present Yuxi (Evan) You and Vue contributors
 			 * @license MIT
-			 **/ 
-			 var Vue = (function (e) {
+			 **/ var Vue = (function (e) {
 				"use strict";
 				var t, n, r;
 				let i, l, s, o, a, c, u, d, p, h, f, m, g;
@@ -43886,7 +43884,6 @@
 					'<html><head><meta charset="utf-8"/><title>SheetJS Table Export</title></head><body>';
 				var Eb = "</body></html>";
 				function Cb(e, r) {
-
 					var t = Vr(e, "table");
 					if (!t || t.length == 0)
 						throw new Error("Invalid HTML: could not find <table>");
@@ -53426,31 +53423,29 @@
 				},
 			};
 		</script>
-		 
 		<script>
-			// 	globalThis.ShipGridFuelRates = {
-			// 		source: "https://www.ontrac.com/surchargesandrates/",
-			// 		series: "National U.S. Average",
-			// 		fetchedAt: "2026-10-13T09:32:54.044632+00:00",
-			// 		rates: [
-			// 			{ start: "2026-07-06", end: "2026-07-12", rate: 0.2225 },
-			// 			{ start: "2026-07-13", end: "2026-07-19", rate: 0.22 },
-			// 			{ start: "2026-07-20", end: "2026-07-26", rate: 0.225 },
-			// 			{ start: "2026-07-27", end: "2026-08-02", rate: 0.235 },
-			// 			{ start: "2026-08-03", end: "2026-08-09", rate: 0.24 },
-			// 			{ start: "2026-08-10", end: "2026-08-16", rate: 0.24 },
-			// 			{ start: "2026-08-17", end: "2026-08-23", rate: 0.2375 },
-			// 			{ start: "2026-08-24", end: "2026-08-30", rate: 0.245 },
-			// 			{ start: "2026-08-31", end: "2026-09-06", rate: 0.25 },
-			// 			{ start: "2026-09-07", end: "2026-09-13", rate: 0.2475 },
-			// 			{ start: "2026-09-14", end: "2026-09-20", rate: 0.2575 },
-			// 			{ start: "2026-09-21", end: "2026-09-27", rate: 0.2675 },
-			// 			{ start: "2026-09-28", end: "2026-10-04", rate: 0.275 },
-			// 			{ start: "2026-10-05", end: "2026-10-11", rate: 0.27 },
-			// 			{ start: "2026-10-12", end: "2026-10-18", rate: 0.265 },
-			// 		],
-			// 	};
-			//
+			globalThis.ShipGridFuelRates = {
+				source: "https://www.ontrac.com/surchargesandrates/",
+				series: "National U.S. Average",
+				fetchedAt: "2026-10-13T09:32:54.044632+00:00",
+				rates: [
+					{ start: "2026-07-06", end: "2026-07-12", rate: 0.2225 },
+					{ start: "2026-07-13", end: "2026-07-19", rate: 0.22 },
+					{ start: "2026-07-20", end: "2026-07-26", rate: 0.225 },
+					{ start: "2026-07-27", end: "2026-08-02", rate: 0.235 },
+					{ start: "2026-08-03", end: "2026-08-09", rate: 0.24 },
+					{ start: "2026-08-10", end: "2026-08-16", rate: 0.24 },
+					{ start: "2026-08-17", end: "2026-08-23", rate: 0.2375 },
+					{ start: "2026-08-24", end: "2026-08-30", rate: 0.245 },
+					{ start: "2026-08-31", end: "2026-09-06", rate: 0.25 },
+					{ start: "2026-09-07", end: "2026-09-13", rate: 0.2475 },
+					{ start: "2026-09-14", end: "2026-09-20", rate: 0.2575 },
+					{ start: "2026-09-21", end: "2026-09-27", rate: 0.2675 },
+					{ start: "2026-09-28", end: "2026-10-04", rate: 0.275 },
+					{ start: "2026-10-05", end: "2026-10-11", rate: 0.27 },
+					{ start: "2026-10-12", end: "2026-10-18", rate: 0.265 },
+				],
+			};
 		</script>
 		<script>
 			(function (root) {
@@ -54389,11 +54384,10 @@
 								throw Error(
 									"单文件模式使用内置官方历史费率；自动抓取需运行源码包中的fuel_server.py或接入公司服务器接口",
 								);
-							const response = await fetch("/api/ontrac/surcharge/history", {
-								method: "GET",
+							const response = await fetch("/api/fuel-refresh", {
+								method: "POST",
 							});
-							const awaidata = await response.json();
-							const data = awaidata.data;
+							const data = await response.json();
 							if (!response.ok) throw Error(data.error || "抓取失败");
 							if (
 								!Array.isArray(data.rates) ||
@@ -60672,6 +60666,7 @@
 								"No Release",
 								"Unauthorized Package",
 								"Rebill Fee",
+								"Reserved",
 							].filter((k) => n(r[k]) !== 0);
 							if (unpriced.length)
 								throw Error("未映射费用需人工确认：" + unpriced.join(","));
@@ -60876,7 +60871,6 @@
 							fees["Peak Add Handling"] = round(peaks.ahs);
 							fees["Peak Oversize"] = round(peaks.os);
 							fees["Peak Residential"] = round(peaks.resi);
-							fees["Reserved"] = round(n(r["Reserved"]));
 							const pricePolicy = root.ShipGridWeightPolicy.price(
 								t.base,
 								z,
@@ -61616,122 +61610,119 @@
 		<script>
 			(function (root) {
 				"use strict";
-				const names = [];
-				const fixed = [];
-				// const names = [
-				// 	"OnTrac2026D.xlsx",
-				// 	"ONTRAC_RATE_D.xlsx",
-				// 	"Fedex_2026C_CD.xlsx",
-				// 	"FEDEX_2026A.xlsx",
-				// 	"ONTRAC_RATE_C.xlsx",
-				// 	"FEDEX_2026B_SD.xlsx",
-				// 	"ONTRAC_RATE_A.xlsx",
-				// 	"Fedex_2026D.xlsx",
-				// 	"OnTrac_2026B.xlsx",
-				// 	"ONTRAC_RATE_B.xlsx",
-				// 	"FEDEX_2026B.xlsx",
-				// 	"Fedex_2026C.xlsx",
-				// ];
-				// const fixed = []
-				// const fixed = [
-				// 	{
-				// 		id: "fixed-3e14c9816c896e2a",
-				// 		carrier: "ontrac",
-				// 		name: "OnTrac2026D",
-				// 		fileName: "OnTrac2026D.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/OnTrac2026D.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-68fb59a449dacc81",
-				// 		carrier: "ontrac",
-				// 		name: "ONTRAC_RATE_D",
-				// 		fileName: "ONTRAC_RATE_D.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/ONTRAC_RATE_D.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-27475eda4f0dae4f",
-				// 		carrier: "fedex",
-				// 		name: "Fedex_2026C_CD",
-				// 		fileName: "Fedex_2026C_CD.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/Fedex_2026C_CD.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-079cee94a89abffa",
-				// 		carrier: "fedex",
-				// 		name: "FEDEX_2026A",
-				// 		fileName: "FEDEX_2026A.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/FEDEX_2026A.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-c4607343818c9b27",
-				// 		carrier: "ontrac",
-				// 		name: "ONTRAC_RATE_C",
-				// 		fileName: "ONTRAC_RATE_C.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/ONTRAC_RATE_C.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-85927d2ee98aa7ee",
-				// 		carrier: "fedex",
-				// 		name: "FEDEX_2026B_SD",
-				// 		fileName: "FEDEX_2026B_SD.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/FEDEX_2026B_SD.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-4cef146912dcb82e",
-				// 		carrier: "ontrac",
-				// 		name: "ONTRAC_RATE_A",
-				// 		fileName: "ONTRAC_RATE_A.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/ONTRAC_RATE_A.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-0b8367f3a312a67f",
-				// 		carrier: "fedex",
-				// 		name: "Fedex_2026D",
-				// 		fileName: "Fedex_2026D.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/Fedex_2026D.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-63998541a44346aa",
-				// 		carrier: "ontrac",
-				// 		name: "OnTrac_2026B",
-				// 		fileName: "OnTrac_2026B.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/OnTrac_2026B.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-5afa7317ba03c48d",
-				// 		carrier: "ontrac",
-				// 		name: "ONTRAC_RATE_B",
-				// 		fileName: "ONTRAC_RATE_B.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/ONTRAC_RATE_B.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-a96f50d9bf6378bf",
-				// 		carrier: "fedex",
-				// 		name: "FEDEX_2026B",
-				// 		fileName: "FEDEX_2026B.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/FEDEX_2026B.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// 	{
-				// 		id: "fixed-98351b308d9ba6e3",
-				// 		carrier: "fedex",
-				// 		name: "Fedex_2026C",
-				// 		fileName: "Fedex_2026C.xlsx",
-				// 		url: "http://121.43.236.24/excel_files/Fedex_2026C.xlsx",
-				// 		source: "fixed-link",
-				// 	},
-				// ];
-
+				const names = [
+					"OnTrac2026D.xlsx",
+					"ONTRAC_RATE_D.xlsx",
+					"Fedex_2026C_CD.xlsx",
+					"FEDEX_2026A.xlsx",
+					"ONTRAC_RATE_C.xlsx",
+					"FEDEX_2026B_SD.xlsx",
+					"ONTRAC_RATE_A.xlsx",
+					"Fedex_2026D.xlsx",
+					"OnTrac_2026B.xlsx",
+					"ONTRAC_RATE_B.xlsx",
+					"FEDEX_2026B.xlsx",
+					"Fedex_2026C.xlsx",
+				];
+				// IDs match server.seed_quotes; injected by build.py.
+				const fixed = [
+					{
+						id: "fixed-3e14c9816c896e2a",
+						carrier: "ontrac",
+						name: "OnTrac2026D",
+						fileName: "OnTrac2026D.xlsx",
+						url: "http://121.43.236.24/excel_files/OnTrac2026D.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-68fb59a449dacc81",
+						carrier: "ontrac",
+						name: "ONTRAC_RATE_D",
+						fileName: "ONTRAC_RATE_D.xlsx",
+						url: "http://121.43.236.24/excel_files/ONTRAC_RATE_D.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-27475eda4f0dae4f",
+						carrier: "fedex",
+						name: "Fedex_2026C_CD",
+						fileName: "Fedex_2026C_CD.xlsx",
+						url: "http://121.43.236.24/excel_files/Fedex_2026C_CD.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-079cee94a89abffa",
+						carrier: "fedex",
+						name: "FEDEX_2026A",
+						fileName: "FEDEX_2026A.xlsx",
+						url: "http://121.43.236.24/excel_files/FEDEX_2026A.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-c4607343818c9b27",
+						carrier: "ontrac",
+						name: "ONTRAC_RATE_C",
+						fileName: "ONTRAC_RATE_C.xlsx",
+						url: "http://121.43.236.24/excel_files/ONTRAC_RATE_C.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-85927d2ee98aa7ee",
+						carrier: "fedex",
+						name: "FEDEX_2026B_SD",
+						fileName: "FEDEX_2026B_SD.xlsx",
+						url: "http://121.43.236.24/excel_files/FEDEX_2026B_SD.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-4cef146912dcb82e",
+						carrier: "ontrac",
+						name: "ONTRAC_RATE_A",
+						fileName: "ONTRAC_RATE_A.xlsx",
+						url: "http://121.43.236.24/excel_files/ONTRAC_RATE_A.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-0b8367f3a312a67f",
+						carrier: "fedex",
+						name: "Fedex_2026D",
+						fileName: "Fedex_2026D.xlsx",
+						url: "http://121.43.236.24/excel_files/Fedex_2026D.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-63998541a44346aa",
+						carrier: "ontrac",
+						name: "OnTrac_2026B",
+						fileName: "OnTrac_2026B.xlsx",
+						url: "http://121.43.236.24/excel_files/OnTrac_2026B.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-5afa7317ba03c48d",
+						carrier: "ontrac",
+						name: "ONTRAC_RATE_B",
+						fileName: "ONTRAC_RATE_B.xlsx",
+						url: "http://121.43.236.24/excel_files/ONTRAC_RATE_B.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-a96f50d9bf6378bf",
+						carrier: "fedex",
+						name: "FEDEX_2026B",
+						fileName: "FEDEX_2026B.xlsx",
+						url: "http://121.43.236.24/excel_files/FEDEX_2026B.xlsx",
+						source: "fixed-link",
+					},
+					{
+						id: "fixed-98351b308d9ba6e3",
+						carrier: "fedex",
+						name: "Fedex_2026C",
+						fileName: "Fedex_2026C.xlsx",
+						url: "http://121.43.236.24/excel_files/Fedex_2026C.xlsx",
+						source: "fixed-link",
+					},
+				];
 				const settingsKey = "ShipGridSharedSettingsV1";
 				let saved = {};
 				try {
@@ -61746,7 +61737,7 @@
 						(location.protocol === "http:" || location.protocol === "https:"
 							? location.origin
 							: "http://121.43.236.24"),
-					token: localStorage.getItem("rbac_token") || "",
+					token: sessionStorage.getItem("ShipGridSharedToken") || "",
 					revision: null,
 					connected: false,
 					busy: false,
@@ -61837,7 +61828,7 @@
 					return accept(await request("/catalog"));
 				}
 				async function loadFileList() {
-					if (applied.mode !== "files" && fixed.length > 0) return;
+					if (applied.mode !== "files") return;
 					const api = new URL(applied.fileApi);
 					if (!["http:", "https:"].includes(api.protocol))
 						throw Error("文件列表接口必须为HTTP/HTTPS");
@@ -61864,40 +61855,41 @@
 									"文件接口返回结构不正确，应为{code:200,data:[文件URL]}",
 							);
 						const seen = new Set(),
-							next = [],
-							nameList = [];
+							next = [];
 						for (const item of result.data) {
-							if (!item || typeof item !== "object") continue;
-							const fileName = item.fileName;
-							if (!fileName || !/\.xlsx$/i.test(fileName)) continue;
-							let fileUrl = (item.fileUrl || "").replace(/^`|`$/g, "");
-							if (!fileUrl) continue;
-							if (seen.has(fileUrl)) continue;
-							seen.add(fileUrl);
-							const name = fileName.replace(/\.xlsx$/i, ""),
-								carrier = /ontrac/i.test(fileName)
+							if (typeof item !== "string") throw Error("文件列表含非URL条目");
+							const u = new URL(item, api.origin);
+							if (
+								u.origin !== api.origin ||
+								!u.pathname.startsWith("/excel_files/") ||
+								!u.pathname.toLowerCase().endsWith(".xlsx")
+							)
+								throw Error("返回文件地址不属于本服务器Excel目录");
+							if (seen.has(u.href)) continue;
+							seen.add(u.href);
+							const filename = decodeURIComponent(u.pathname.split("/").pop()),
+								carrier = /ontrac/i.test(filename)
 									? "ontrac"
-									: /fedex/i.test(fileName)
+									: /fedex/i.test(filename)
 										? "fedex"
-										: /ups/i.test(fileName)
+										: /ups/i.test(filename)
 											? "ups"
-											: "";
-							const existing = fixed.find((q) => q.url === fileUrl);
+											: null;
+							if (!carrier) continue;
+							const existing = fixed.find((q) => q.url === u.href);
 							let hash = 2166136261;
-							for (const c of fileUrl)
+							for (const c of u.href)
 								hash = Math.imul(hash ^ c.charCodeAt(0), 16777619) >>> 0;
 							next.push({
 								id: existing?.id || "api-file-" + hash.toString(16),
 								carrier,
-								name,
-								fileName,
-								url: fileUrl,
+								name: filename.replace(/\.xlsx$/i, ""),
+								fileName: filename,
+								url: u.href,
 								source: "fixed-link",
 							});
-							nameList.push(fileName);
 						}
 						fixed.splice(0, fixed.length, ...next);
-						names.splice(0, names.length, ...nameList);
 						state.connected = true;
 						state.listLoaded = true;
 						state.error = "";
@@ -61928,13 +61920,6 @@
 							"/quotes/" + encodeURIComponent(key) + "/file",
 							{ binary: true },
 						);
-						const head = new Uint8Array(
-							data,
-							0,
-							Math.min(4, data.byteLength),
-						);
-						if (head[0] === 60)
-							throw Error("服务器返回的不是Excel文件（疑似HTML错误页）");
 						state.statuses[key] = "已读取";
 						return { ...item, data };
 					} catch (e) {
@@ -61992,18 +61977,11 @@
 						if (!r.ok) throw Error("HTTP " + r.status);
 						const data = await r.arrayBuffer();
 						if (data.byteLength > 20 * 1024 * 1024) throw Error("文件超过20MB");
-						const head = new Uint8Array(data, 0, Math.min(4, data.byteLength));
-						if (head[0] === 60)
-							throw Error(
-								"服务器返回的不是Excel文件（疑似HTML错误页），请检查文件链接或跨域配置",
-							);
 						state.statuses[q.id] = "已读取";
 						return { ...q, data };
 					} catch (e) {
 						const message =
-							e instanceof TypeError
-								? "固定文件读取失败。请连接共享服务器，或由服务器为文件目录配置跨域访问。"
-								: e.message;
+							"固定文件读取失败。请连接共享服务器，或由服务器为文件目录配置跨域访问。";
 						state.statuses[q.id] = message;
 						throw Error(q.fileName + "：" + message);
 					} finally {
@@ -62124,6 +62102,7 @@
 				const mount = document.createElement("div");
 				mount.id = "shipgrid-shared";
 				document.body.appendChild(mount);
+				mount.innerHTML = `<div class="shared-toggle"><button @click="opened=!opened">公司共享资料 · {{cfg.connected&&cfg.enabled?'已连接':'设置 / 固定价表'}}</button></div><div v-if="opened" class="quote-overlay"><section class="quote-window"><div class="section-heading"><h2>公司共享资料与固定价表</h2><button @click="opened=false">关闭</button></div><p>共享报价、客户ID／名称及客户匹配。账单原始文件仍在本机处理。</p><div class="select-grid"><label>资料来源<select v-model="cfg.mode"><option value="local">本地浏览器（含固定链接）</option><option value="files">现有文件接口（服务器价表）</option><option value="shared">完整共享接口（报价＋客户匹配）</option></select></label><label v-if="cfg.mode==='files'">文件列表接口<input v-model="cfg.fileApi"></label><label>共享服务器地址<input v-model="cfg.base" placeholder="http://121.43.236.24"></label><label>共享访问凭证<input type="password" autocomplete="off" v-model="cfg.token" placeholder="由管理员提供，仅本次浏览器会话保存"></label></div><div class="action-row"><button class="primary" @click="apply" :disabled="cfg.busy">连接 / 保存设置</button><button @click="reload" :disabled="cfg.busy">刷新共享列表</button><button @click="migrate" :disabled="cfg.busy||!cfg.connected">将本地资料合并上传服务器</button></div><p v-if="cfg.message" class="notice">{{cfg.message}}</p><p v-if="cfg.error" class="error">{{cfg.error}}</p><p><span v-if="cfg.mode==='files'">现有文件接口只读取报价；客户资料和匹配关系仍为本机保存。</span><span v-else>共享版本：{{cfg.revision??'尚未连接'}}。只读凭证可读取；管理凭证可上传、修改及导入。</span></p><h3>固定文件清单</h3><p>默认登记你提供的12份文件。未读取不代表已校验；生成账单时会下载并按承运商检查价表。客户匹配须在“固定报价与客户匹配管理”中配置。</p><div class="table-scroll"><table><thead><tr><th>承运商</th><th>文件</th><th>读取状态</th><th>操作</th></tr></thead><tbody><tr v-for="q in catalog" :key="q.id"><td>{{q.carrier}}</td><td>{{q.fileName}}</td><td>{{cfg.statuses[q.id]||'尚未读取'}}</td><td><button @click="downloadOriginal(q)" :disabled="cfg.busy">下载原始文件</button></td></tr></tbody></table></div><button @click="manager" :disabled="cfg.busy">打开固定报价与客户匹配管理</button></section></div>`;
 				Vue.createApp({
 					setup() {
 						const opened = Vue.ref(false),
@@ -62165,7 +62144,6 @@
 						).trim(),
 					});
 				function match(rules, carrier, g) {
-				 
 					const c = identity(g),
 						scope = rules.filter((r) => r.carrier === carrier),
 						ids = c.id
@@ -62179,13 +62157,11 @@
 										r.customerName && norm(r.customerName) === norm(c.name),
 								)
 							: [];
-
 					if (ids.length > 1 || names.length > 1)
 						throw Error("客户报价匹配规则重复：" + c.id + " / " + c.name);
 					if (ids.length && names.length && ids[0].quoteId !== names[0].quoteId)
 						throw Error("客户ID与名称匹配到不同报价，请修正规则");
 					const r = ids[0] || names[0];
-
 					if (!r) throw Error("未配置客户报价：" + c.id + " / " + c.name);
 					return r;
 				}
@@ -62316,11 +62292,6 @@
 						await root.ShipGridShared.refresh();
 					if (root.ShipGridShared.isFiles())
 						await root.ShipGridShared.loadFileList();
-					else if (!root.ShipGridShared.fixed?.length) {
-						try {
-							await root.ShipGridShared.loadFileList();
-						} catch {}
-					}
 					const [quotes, rules, customers] = await Promise.all([
 						read("quotes"),
 						read("rules"),
@@ -62463,21 +62434,11 @@
 						for (const id of ids) {
 							const q = await read("quotes", id);
 							if (!q || q.carrier !== carrier || !q.data) continue;
-							let parsed;
-							try {
-								parsed = XLSX.read(q.data, {
-									type: "array",
-									cellDates: false,
-									dense: true,
-								});
-							} catch (e) {
-								throw Error(
-									"报价「" +
-										(q.name || q.fileName || id) +
-										"」解析失败：" +
-										e.message,
-								);
-							}
+							const parsed = XLSX.read(q.data, {
+								type: "array",
+								cellDates: false,
+								dense: true,
+							});
 							validateQuote(parsed, carrier);
 							entries.set(id, { ...q, wb: Vue.markRaw(parsed) });
 						}
@@ -62545,7 +62506,7 @@
 				const host = document.createElement("div");
 				host.id = "quote-manager";
 				document.body.appendChild(host);
-				host.innerHTML = `<div v-if="opened" class="quote-overlay" @click.self="opened=false"><section class="quote-window" role="dialog" aria-modal="true" aria-label="固定报价与客户匹配管理"><div class="section-heading"><h2>固定报价与客户匹配管理</h2><button @click="opened=false">关闭</button></div><p>支持公司服务器共享或本地浏览器保存。共享模式下上传报价、客户资料及匹配关系会同步保存到服务器；生成账单前自动刷新。</p><div class="action-row"><button @click="backup" :disabled="busy">导出报价与规则备份</button><label class="text-button">恢复备份<input type="file" accept=".json" @change="restore" :disabled="busy"></label></div><p v-if="message" class="notice">{{message}}</p><p v-if="error||store.error" class="error">{{error||store.error}}</p><p class="notice">当前保存位置：{{sharing.enabled?'公司共享服务器':sharing.mode==='files'?'客户与匹配保存在本机；固定价表来自文件接口':'本机浏览器'}}。共享服务器单份报价上限20MB；本地上限200MB。</p><h3>客户资料（录入后可下拉选择）</h3><div class="select-grid"><label>客户ID<input v-model="customerForm.customerId" placeholder="与GTS客户ID一致，保留开头的0" :disabled="busy"></label><label>客户名称<input v-model="customerForm.customerName" placeholder="真实客户名称" :disabled="busy"></label></div><button @click="saveCustomer" :disabled="busy">{{customerForm.id?'保存客户修改':'保存客户资料'}}</button><button v-if="customerForm.id" @click="resetCustomer" :disabled="busy">取消编辑</button><div class="table-scroll"><table><thead><tr><th>客户ID</th><th>客户名称</th><th>操作</th></tr></thead><tbody><tr v-for="c in store.customers" :key="c.id"><td>{{c.customerId}}</td><td>{{c.customerName}}</td><td><button @click="editCustomer(c)" :disabled="busy">编辑客户</button></td></tr></tbody></table></div>
+				host.innerHTML = `<div v-if="opened" class="quote-overlay"><section class="quote-window" role="dialog" aria-modal="true" aria-label="固定报价与客户匹配管理"><div class="section-heading"><h2>固定报价与客户匹配管理</h2><button @click="opened=false">关闭</button></div><p>支持公司服务器共享或本地浏览器保存。共享模式下上传报价、客户资料及匹配关系会同步保存到服务器；生成账单前自动刷新。</p><div class="action-row"><button @click="backup" :disabled="busy">导出报价与规则备份</button><label class="text-button">恢复备份<input type="file" accept=".json" @change="restore" :disabled="busy"></label></div><p v-if="message" class="notice">{{message}}</p><p v-if="error||store.error" class="error">{{error||store.error}}</p><p class="notice">当前保存位置：{{sharing.enabled?'公司共享服务器':sharing.mode==='files'?'客户与匹配保存在本机；固定价表来自文件接口':'本机浏览器'}}。共享服务器单份报价上限20MB；本地上限200MB。</p><h3>客户资料（录入后可下拉选择）</h3><div class="select-grid"><label>客户ID<input v-model="customerForm.customerId" placeholder="与GTS客户ID一致，保留开头的0" :disabled="busy"></label><label>客户名称<input v-model="customerForm.customerName" placeholder="真实客户名称" :disabled="busy"></label></div><button @click="saveCustomer" :disabled="busy">{{customerForm.id?'保存客户修改':'保存客户资料'}}</button><button v-if="customerForm.id" @click="resetCustomer" :disabled="busy">取消编辑</button><div class="table-scroll"><table><thead><tr><th>客户ID</th><th>客户名称</th><th>操作</th></tr></thead><tbody><tr v-for="c in store.customers" :key="c.id"><td>{{c.customerId}}</td><td>{{c.customerName}}</td><td><button @click="editCustomer(c)" :disabled="busy">编辑客户</button></td></tr></tbody></table></div>
 <h3>Excel批量导入客户与报价匹配</h3><div class="action-row"><button @click="downloadMappingTemplate" :disabled="busy">下载Excel匹配模板</button><label class="text-button">导入Excel匹配表<input type="file" accept=".xlsx,.xls" @change="importMappings" :disabled="busy"></label></div><p>先上传报价，再填写承运商、客户ID、客户名称、报价名称。导入会保存新客户、更新相同客户的匹配；任何一行有错均不写入。</p><h3>上传固定报价表（数量不限）</h3><p><button @click="downloadStandard" :disabled="busy">下载所选承运商标准价表</button> 已保存报价可逐份下载为标准格式，再修改后替换上传。</p><div class="quote-direct-upload"><div class="select-grid"><label>承运商<select v-model="newCarrier" :disabled="busy"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>上传后绑定客户（可选，仅单份报价）<select v-model="uploadCustomer" :disabled="busy"><option value="">仅保存报价，稍后匹配客户</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>报价名称（可选，单份上传时使用）<input v-model="newName" :disabled="busy" placeholder="不填则使用文件名"></label></div><button class="primary" @click="$refs.fixedQuoteUpload.click()" :disabled="busy">{{busy?'正在校验并保存…':'＋ 选择并上传报价表（可多选）'}}</button><input ref="fixedQuoteUpload" class="quote-upload-file" type="file" accept=".xlsx,.xls" multiple @change="uploadNew" :disabled="busy"><p>选择承运商后可一次选择多份Excel，自动校验并保存。OnTrac、FedEx和UPS均不限制报价表数量，单个文件上限200MB。</p></div><h3>已保存报价 · UPS {{store.quotes.filter(q=>q.carrier==='ups'&&q.hasData).length}}份 / OnTrac {{store.quotes.filter(q=>q.carrier==='ontrac'&&q.hasData).length}}份 / FedEx {{store.quotes.filter(q=>q.carrier==='fedex'&&q.hasData).length}}份</h3><div class="table-scroll"><table><thead><tr><th>承运商</th><th>报价名称</th><th>文件</th><th>操作</th></tr></thead><tbody><tr v-for="q in store.quotes.filter(q=>q.hasData)" :key="q.id"><td>{{q.carrier==='ontrac'?'OnTrac':q.carrier==='ups'?'UPS':'FedEx'}}</td><td><input :value="q.name" @change="rename(q,$event.target.value)" :disabled="busy"></td><td>{{q.fileName||'尚未上传'}}<small v-if="q.updatedAt"> · {{q.updatedAt.slice(0,10)}}</small></td><td><button @click="downloadStandard(q)" :disabled="busy">下载标准价表</button><label class="text-button">{{q.hasData?'替换报价':'上传报价'}}<input type="file" accept=".xlsx,.xls" @change="upload(q,$event)" :disabled="busy"></label></td></tr></tbody></table></div><p v-if="!store.quotes.some(q=>q.hasData)" class="notice">还没有上传固定报价，请使用上方“选择并上传报价表”按钮。</p><h3>客户ID／名称 → 报价表</h3><p>同一客户可分别设置OnTrac、FedEx与UPS报价。ID优先、名称精确匹配；ID与名称指向不同报价时停止该订单出账。可填写真实客户名称，避免把“客服”列当作客户名称。</p><div class="select-grid"><label>选择已保存客户<select v-model="selectedCustomer" @change="selectCustomer"><option value="">选择客户自动填入ID和名称</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>承运商<select v-model="rule.carrier"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>客户ID<input v-model="rule.customerId" placeholder="与GTS客户ID一致"></label><label>客户名称<input v-model="rule.customerName" placeholder="例如 江苏虫洞-SG、NJSD-SG"></label><label>对应报价<select v-model="rule.quoteId"><option value="">请选择</option><option v-for="q in store.quotes.filter(q=>q.carrier===rule.carrier&&q.hasData)" :value="q.id">{{q.name}}</option></select></label><template v-if="rule.carrier==='fedex'"><label>分区来源<select v-model="rule.fedexZone"><option value="spGtsOtherMax">SmartPost按GTS，其他取大（默认）</option><option value="spGtsOtherRaw">SmartPost按GTS，其他按原始</option><option value="raw">全部按原始</option><option value="gts">全部按GTS</option><option value="max">全部原始/GTS取大</option></select></label><label>重量来源<select v-model="rule.fedexWeight"><option value="maximum">原始计费重、GTS实重、GTS体积重取大</option><option value="raw">原始账单计费重</option></select></label><label>GTS实重进位规则<select v-model="rule.fedexPrecision"><option value="ceil">直接向上取整磅</option><option value="two">截取两位小数后向上取整磅</option></select></label></template></div><p v-if="rule.carrier==='fedex'">easyprint：选“SmartPost按GTS，其他按原始”＋“原始账单计费重”；LEQUMOD：可选“截取两位小数后向上取整磅”，例如10.003LB→10LB，10.01LB→11LB。该规则只影响GTS实重，原始计费重与体积重规则不变。附加费仍按尺寸/实重判断，适用最低计费重继续执行。保存后与客户报价匹配一起应用。</p><button @click="saveRule" :disabled="busy">{{rule.id?'保存修改':'保存客户匹配'}}</button><button v-if="rule.id" @click="resetRule">取消编辑</button><div class="table-scroll"><table><thead><tr><th>承运商</th><th>客户ID</th><th>客户名称</th><th>报价</th><th>操作</th></tr></thead><tbody><tr v-for="r in store.rules" :key="r.id"><td>{{r.carrier}}</td><td>{{r.customerId}}</td><td>{{r.customerName}}</td><td>{{quoteName(r.quoteId)}}<small v-if="r.carrier==='fedex'"> · {{policyDescription(r)}}</small></td><td><button @click="edit(r)" :disabled="busy">编辑</button><button @click="remove(r)" :disabled="busy">删除规则</button></td></tr></tbody></table></div></section></div>`;
 				Vue.createApp({
 					setup() {
@@ -63158,7 +63119,6 @@
 							busy.value = false;
 						}
 					}
-					// OnTrac的点击生成账单按钮
 					async function run() {
 						busy.value = true;
 						clear();
@@ -63334,13 +63294,13 @@
 				fetchedAt: "2026-10-14",
 				rates: [
 					["2026-08-24", "2026-08-30", 0.2675],
-					// ["2026-08-31", "2026-09-06", 0.2725],
-					// ["2026-09-07", "2026-09-13", 0.27],
-					// ["2026-09-14", "2026-09-20", 0.28],
-					// ["2026-09-21", "2026-09-27", 0.29],
-					// ["2026-09-28", "2026-10-04", 0.2975],
-					// ["2026-10-05", "2026-10-11", 0.2925],
-					// ["2026-10-12", "2026-10-18", 0.2875],
+					["2026-08-31", "2026-09-06", 0.2725],
+					["2026-09-07", "2026-09-13", 0.27],
+					["2026-09-14", "2026-09-20", 0.28],
+					["2026-09-21", "2026-09-27", 0.29],
+					["2026-09-28", "2026-10-04", 0.2975],
+					["2026-10-05", "2026-10-11", 0.2925],
+					["2026-10-12", "2026-10-18", 0.2875],
 				].map(([start, end, rate]) => ({ start, end, rate })),
 			};
 		</script>
@@ -63779,7 +63739,6 @@
 						)
 							cols[h] = i;
 					});
-
 					const gm = matrix(
 							gtsWb,
 							gtsWb.SheetNames.includes("GTS") ? "GTS" : null,
@@ -63861,9 +63820,8 @@
 								throw Error("GTS缺少客户ID，请在客户匹配规则补充");
 							used.add(ids[0]);
 							if (
-								source[cols["Number of Pieces"]] &&
-								(Number(g["件数"]) !== 1 ||
-									Number(source[cols["Number of Pieces"]]) !== 1)
+								Number(g["件数"]) !== 1 ||
+								Number(source[cols["Number of Pieces"]]) !== 1
 							)
 								throw Error("只支持单件包裹，合件需人工处理");
 							const service = String(source[cols["Service Type"]] ?? "").trim(),
@@ -63997,7 +63955,6 @@
 									positive(source[cols["Rated Weight Amount"]], "原始计费重") *
 										(bu === "kg" ? kg : 1),
 								);
-
 							const rd = ["Dim Length", "Dim Width", "Dim Height"]
 									.map(
 										(k) =>
@@ -64133,7 +64090,6 @@
 									),
 									os ? 90 : dEligible ? 40 : 0,
 								);
-
 							if (eco) {
 								if (girth > 108) billed = Math.max(billed, 71);
 								else if (girth > 84) billed = Math.max(billed, 20);
@@ -64288,7 +64244,6 @@
 								)
 									throw Error("日期无效，无法确定客户旺季报价");
 							}
-
 							let reference,
 								method,
 								official = dd
@@ -64296,8 +64251,7 @@
 											(x) => dd >= x.start && dd <= x.end,
 										)
 									: null;
-							if (dd && !official)
-								throw Error("官方燃油历史未覆盖日期：" + dd);
+							if (dd && !official) throw Error("1官方燃油历史未覆盖日期：" + dd);
 							const origFactor = positive(
 								settings.originalFuelFactor,
 								"原始账户燃油支付比例",
@@ -64341,7 +64295,6 @@
 							set("Actual Weight Amount", actual);
 							set("Actual Weight Units", "lbs");
 							set("Rated Weight Amount", billed);
-
 							set("Rated Weight Units", "lbs");
 							["Dim Length", "Dim Width", "Dim Height"].forEach((k, i) =>
 								set(k, dims[i]),
@@ -64384,7 +64337,6 @@
 								red.push(cols["Actual Weight Amount"]);
 							if (choice.source === "原始" && rb > gb && billed === rb)
 								red.push(cols["Rated Weight Amount"]);
-
 							if (choice.source === "原始" && wi.gtsDims)
 								rd.forEach((v, i) => {
 									if (ceil(v) > ceil(gd[i]))
@@ -64842,7 +64794,6 @@
 							continue;
 						records.push({ header: h, top: r.top[i] ?? null, index: i });
 					}
-
 					// Any fee absent from the source's Chinese categories gets its own explicit
 					// Chinese heading; never put it under a different fee's generic slot.
 					for (const k of feeColumns) emit(k);
@@ -65122,26 +65073,16 @@
 								throw Error(
 									"单文件使用内置历史费率；联网更新需运行源码包中的fuel_server.py或对接公司后端",
 								);
-							const response = await fetch("/api/fedex/surcharge/weekly", {
-								method: "GET",
+							const response = await fetch("/api/fedex-fuel-refresh", {
+								method: "POST",
 							});
-							const raw = await response.json();
-							if (!response.ok)
-								throw Error(raw.msg || raw.error || "官网更新失败");
-							const data = raw.data;
+							const data = await response.json();
+							if (!response.ok) throw Error(data.error || "官网更新失败");
 							if (
-								!data ||
 								!Array.isArray(data.rates) ||
 								!data.rates.length ||
 								data.source !==
-									"https://www.fedex.com/en-us/shipping/historical-fuel-surcharge.html" ||
-								data.rates.some(
-									(x) =>
-										!Number.isFinite(x.rate) ||
-										x.rate <= 0 ||
-										x.rate >= 1 ||
-										x.start > x.end,
-								)
+									"https://www.fedex.com/en-us/shipping/historical-fuel-surcharge.html"
 							)
 								throw Error("官方数据校验失败");
 							globalThis.FedExFuel = data;
@@ -65153,7 +65094,6 @@
 							fuelRefreshing.value = false;
 						}
 					}
-					// Fedex的账单生成按钮
 					async function run() {
 						busy.value = true;
 						clear();
@@ -79889,7 +79829,7 @@
 				const el = document.createElement("div");
 				el.id = "ups-audit-app";
 				el.style.display = "none";
-				el.innerHTML = ` <main><header><div class="crumb">财务 / 账单审核 / UPS</div><div class="header-tag">V3.59</div></header><section class="hero"><div><div class="eyebrow">UPS INVOICE AUDIT</div><h1>按整票审核HWT、Ground及账单调整</h1><p>上传原始账单，自动区分整票运费、特殊服务、账号费用和资料不全的调整。</p></div></section><section class="panel"><h2>01　导入账单与合约规则</h2><p>支持UPS明细Excel / CSV及标准化费用明细。已内置两份UPS合约：第二份优先、第一份补充；未列优惠的费用按官网公布价审核。每行一项费用。单个文件最大500MB。</p><div class="select-grid"><label>审核规则<select v-model="ruleMode" @change="result=[]"><option value="default">内置：第二份优先＋第一份补充＋UPS官网价</option><option value="custom">上传自定义规则</option></select></label></div><div v-if="ruleMode==='default'"><div class="notice">燃油自动按原始Transaction Date匹配UPS官网周费率；CSV自动按同运单、同交易日、同费用类别汇总净燃油基数。Basis Value单独保留，不当作净基数。<button class="text-button" @click="refreshUPSFuel" :disabled="busy||fuelRefreshing">{{fuelRefreshing?'更新中…':'更新UPS官网燃油历史'}}</button><p v-if="fuelMessage">{{fuelMessage}}</p></div><div class="notice">默认合约状态：两份均已生效。第二份优先、第一份补充；High Volume高货量旺季费用不计算，原收费单独列为“不参与审核”。普通旺季住宅、AHS及OS仍按合约审核。所有合约按最优档位计算，不按周货量降档。旺季AHS/OS按10月6日修订版90% OFF，普通旺季商业/住宅80% OFF。</div><details><summary>最低净额覆盖及燃油依据（可选）</summary><p>合约p11字面最低价：Commercial=官网Ground 2区1LB×52.2%，Residential=×50%，住宅费另算。此前价表Residential 6.32与该条款不一致，若采用6.32或其他UPS确认最低额，请填金额及依据；不会自动把销售价作为最低净额。</p><div class="select-grid"><label>Commercial最低净运输费覆盖<input type="number" min="0" step="0.01" v-model="defaultSettings.minComm" @change="result=[]"></label><label>Residential最低净运输费覆盖<input type="number" min="0" step="0.01" v-model="defaultSettings.minResi" @change="result=[]"></label><label>最低净额确认依据<input v-model="defaultSettings.minimumEvidence" @change="result=[]" placeholder="UPS确认邮件/Custom Rate Chart及日期"></label><label>官网历史未覆盖时的单周费率覆盖（0.26=26%）<input type="number" min="0" max="1" step="0.0025" v-model="defaultSettings.fuelRate" @change="result=[]"></label><label>燃油适用周及官网来源<input v-model="defaultSettings.fuelEvidence" @change="result=[]" placeholder="仅单周账单可统一填；多周请逐行提供"></label></div></details><details><summary>查看内置合约规则及官网版本（{{defaultCatalog.length}}项）</summary><div class="table-scroll"><table><thead><tr><th>项目</th><th>默认规则</th><th>依据</th></tr></thead><tbody><tr v-for="r in defaultCatalog"><td>{{r.项目}}</td><td style="white-space:normal;min-width:400px">{{r.默认规则}}</td><td style="white-space:normal">{{r.依据}}</td></tr></tbody></table></div><button class="text-button" @click="downloadDefaults">↓ 导出内置规则说明</button></details></div><div class="billing-upload-grid"><label class="upload-card"><strong>UPS原始账单</strong><input type="file" accept=".xlsx,.xls,.csv" @change="load($event,'bill')"><span>{{billName||'选择文件'}}</span></label><label v-if="ruleMode==='custom'" class="upload-card"><strong>自定义合约审核规则</strong><input type="file" accept=".xlsx,.xls,.csv" @change="load($event,'rule')"><span>{{ruleName||'选择文件'}}</span></label></div><button class="text-button" @click="template">↓ 下载填写模板（账单+合约规则+说明）</button><div class="notice">默认规则直接来自两份合约原文及UPS官方2026-09-07版公布价，不使用客户加价报价。两份合约按已生效执行，不要求填写生效日；不计算High Volume高货量旺季费用。未知费用/未覆盖官网版本仍按公布价原则，资料不足列待核实，不拿账单原价自证。</div><p v-if="importNotice" class="notice">{{importNotice}}</p><div v-if="books.bill" class="select-grid"><label>账单工作表<select v-model="billSheet" @change="readBill"><option v-for="s in books.bill.SheetNames">{{s}}</option></select></label><label>表头行<input type="number" min="1" v-model.number="headerRow" @change="readBill"></label></div><details v-if="headers.length"><summary>确认账单列映射（{{billRows.length}} 行）</summary><p class="muted">净额必须是该费用行的实收，不能选择整票合计。只有公布金额和折扣时，可勾选推算。分区及重量需与规则口径一致。</p><div class="select-grid"><label v-for="(k,i) in keys">{{k}}<select v-model="mapping[i]" @change="result=[]"><option :value="-1">未映射</option><option v-for="(h,j) in headers" :value="j">{{j+1}} · {{h}}</option></select></label></div><label><input type="checkbox" v-model="derive" @change="result=[]">无实收列时，用公布金额 − 折扣绝对值推算实收</label></details><div v-if="books.rule" class="select-grid"><label>规则工作表<select v-model="ruleSheet" @change="result=[]"><option v-for="s in books.rule.SheetNames">{{s}}</option></select></label></div><label>金额容差 USD <input type="number" min="0" step="0.01" v-model.number="tolerance" @change="result=[]"></label><div class="notice">折扣应收 = max(公布金额 × (1−减免比例), 最低净额)。最低净额只用于所属费用项，住宅等附加费单列；燃油按核实后的适用基数计算。相同运单的不同费用行不会被当作重复订单。退款、重复费用行、未知费用与规则缺失均列入待核实，不计入确认多收。</div><div class="action-row"><p>规则按账号、服务、费用、日期、分区及重量唯一匹配。</p><button class="primary" :disabled="busy||exporting||!books.bill||(ruleMode==='custom'&&!books.rule)" @click="run">{{busy?'审核中…':'开始审核 →'}}</button></div><p v-if="error" class="error" role="alert">{{error}}</p></section><template v-if="result.length"><template v-if="shipmentReport"><section class="panel"><h2>HWT／Ground全部费用汇总</h2><p>原始 {{shipmentReport.rawCount}} 行 · 账单实收 USD {{shipmentReport.total.toFixed(2)}}。燃油、DAS、EDAS、住宅及其他服务费计入所属HWT/Ground总费用；调整按可追溯原单归属，无法归属单列。账号费用也计入账单合计。零金额更正不计收费金额，但参与审核费计件。HWT基础费按第一份合约，最低均重20LB、最低每票$72；HWT DAS/EDAS整票按公布价，Shipment Residential Surcharge保留70% OFF申诉。已核算申诉 USD {{shipmentReport.confirmedOvercharge.toFixed(2)}}，与Dispute合计一致。</p><div class="table-scroll"><table><thead><tr><th v-for="k in Object.keys(shipmentReport.displaySummary[0]||{})">{{k}}</th></tr></thead><tbody><tr v-for="r in shipmentReport.displaySummary"><td v-for="v in r">{{v}}</td></tr></tbody></table></div><p class="notice">整票完成 {{shipmentReport.shipments.filter(s=>s['整票核算完整']==='是').length}} 票；未完成 {{shipmentReport.shipments.filter(s=>s['整票核算完整']!=='是').length}} 票。待核原因逐项列在下方及导出的「待核清单」，无申诉金额不代表审核通过。</p><p>调整 {{shipmentReport.adjustments.length}} 票，其中 {{shipmentReport.missingOriginal}} 票本账单缺少原基础费，需历史账单配对。{{shipmentReport.info.length}} 行零金额/信息记录单独保留。</p><details v-for="section in [{title:'Ground Commercial / Residential分类汇总',data:shipmentReport.serviceSummary},{title:'待核清单（未完成不代表通过）',data:shipmentReport.pendingChecks||[]},{title:'已出账超收明细',data:shipmentReport.overcharges},{title:'HWT整票明细',data:shipmentReport.shipments.filter(r=>r['类别']==='HWT')},{title:'Ground整票明细',data:shipmentReport.shipments.filter(r=>r['类别']==='Ground')},{title:'HWT附加费',data:shipmentReport.hwtComponents},{title:'Additional Handling明细',data:shipmentReport.additionalHandlingDetails},{title:'Billing Adjustment收费条件核对',data:shipmentReport.billingAudit},{title:'审核费计件明细',data:shipmentReport.correctionPackages},{title:'账号及账单级费用',data:shipmentReport.accounts},{title:'调整及缺原单记录',data:shipmentReport.adjustments}]"><summary>{{section.title}}（{{section.data.length}}）</summary><div class="table-scroll"><table><thead><tr><th v-for="k in Object.keys(section.data[0]||{})">{{k}}</th></tr></thead><tbody><tr v-for="r in section.data.slice(0,100)"><td v-for="v in r">{{v}}</td></tr></tbody></table></div><p>页面显示前100条，导出包含全部。</p></details></section></template><section v-if="!shipmentReport" class="stats"><div class="stat"><span>费用行辅助核对</span><strong>{{result.length}}</strong><div>通过 {{counts['通过']||0}} 行</div></div><div class="stat warning"><span>多收异常</span><strong>{{counts['多收异常']||0}}</strong><div>超收金额 USD {{total.toFixed(2)}}</div></div><div class="stat warning"><span>费用行待核实</span><strong>{{counts['待核实']||0}}</strong><div>资料缺失、调整或重复</div></div><div class="stat"><span>少收提示</span><strong>{{counts['少收提示']||0}}</strong><div>High Volume不参与审核 {{counts['不参与审核']||0}} 行；少收不抵减多收</div></div></section><section class="panel"><div class="section-heading"><h2>02　审查报告</h2><button v-if="shipmentReport" class="download" @click="downloadDispute" :disabled="exporting||busy">↓ 导出Dispute表</button><button class="primary" :disabled="exporting||busy" @click="downloadCSV">↓ 导出审核报告CSV</button><button class="download" :disabled="exporting||busy" @click="download">{{exporting?'正在导出…':'↓ 导出审核报告Excel'}}</button></div><p v-if="exportMessage" class="notice" role="status">{{exportMessage}} <button v-if="exporting" class="text-button" @click="cancelExport">取消导出</button></p><p v-for="f in exportFiles" :key="f.name"><a v-if="f.url" :href="f.url" :download="f.name">↓ {{f.name}}</a><span v-else>已保存：{{f.name}}</span></p><p>金额为已核算项目的出账超收金额；以UPS已出账金额为实收依据，合并更正及退款后重算完整合约应收。Dispute表包含已完整核算的超收订单及可独立核算的超收附加费；账号费用另页列示；Payment Processing Fee暂不纳入Dispute，审核报告仍保留。未核算项目不纳入申诉。默认报告包含汇总、逐票费用、附加费和调整费核对；Dispute包含申诉项目及对应原始收费记录。账单尺寸/重量按UPS已出账更正结果核算。</p><div class="toolbar"><select v-model="filter"><option>全部</option><option>多收异常</option><option>待核实</option><option>少收提示</option><option>不参与审核</option><option>通过</option><option>已并入整票</option></select><input class="search" v-model="search" placeholder="搜索运单 / 账单 / 原因" @input="page=1"></div><div class="table-scroll"><table><thead><tr><th v-for="k in displayKeys">{{k}}</th></tr></thead><tbody><tr v-for="r in visible"><td v-for="k in displayKeys" :class="k==='状态'&&r[k]!=='通过'?'warning-text':''">{{r[k]}}</td></tr></tbody></table></div><div class="pagination"><span>筛选 {{filtered.length}} 行 · 导出包含全部结果</span><button :disabled="page<=1" @click="page--">上一页</button><span>{{page}} / {{pages}}</span><button :disabled="page>=pages" @click="page++">下一页</button></div></section></template></main>`;
+				el.innerHTML = `<main><header><div class="crumb">财务 / 账单审核 / UPS</div><div class="header-tag">V3.59</div></header><section class="hero"><div><div class="eyebrow">UPS INVOICE AUDIT</div><h1>按整票审核HWT、Ground及账单调整</h1><p>上传原始账单，自动区分整票运费、特殊服务、账号费用和资料不全的调整。</p></div></section><section class="panel"><h2>01　导入账单与合约规则</h2><p>支持UPS明细Excel / CSV及标准化费用明细。已内置两份UPS合约：第二份优先、第一份补充；未列优惠的费用按官网公布价审核。每行一项费用。单个文件最大500MB。</p><div class="select-grid"><label>审核规则<select v-model="ruleMode" @change="result=[]"><option value="default">内置：第二份优先＋第一份补充＋UPS官网价</option><option value="custom">上传自定义规则</option></select></label></div><div v-if="ruleMode==='default'"><div class="notice">燃油自动按原始Transaction Date匹配UPS官网周费率；CSV自动按同运单、同交易日、同费用类别汇总净燃油基数。Basis Value单独保留，不当作净基数。<button class="text-button" @click="refreshUPSFuel" :disabled="busy||fuelRefreshing">{{fuelRefreshing?'更新中…':'更新UPS官网燃油历史'}}</button><p v-if="fuelMessage">{{fuelMessage}}</p></div><div class="notice">默认合约状态：两份均已生效。第二份优先、第一份补充；High Volume高货量旺季费用不计算，原收费单独列为“不参与审核”。普通旺季住宅、AHS及OS仍按合约审核。所有合约按最优档位计算，不按周货量降档。旺季AHS/OS按10月6日修订版90% OFF，普通旺季商业/住宅80% OFF。</div><details><summary>最低净额覆盖及燃油依据（可选）</summary><p>合约p11字面最低价：Commercial=官网Ground 2区1LB×52.2%，Residential=×50%，住宅费另算。此前价表Residential 6.32与该条款不一致，若采用6.32或其他UPS确认最低额，请填金额及依据；不会自动把销售价作为最低净额。</p><div class="select-grid"><label>Commercial最低净运输费覆盖<input type="number" min="0" step="0.01" v-model="defaultSettings.minComm" @change="result=[]"></label><label>Residential最低净运输费覆盖<input type="number" min="0" step="0.01" v-model="defaultSettings.minResi" @change="result=[]"></label><label>最低净额确认依据<input v-model="defaultSettings.minimumEvidence" @change="result=[]" placeholder="UPS确认邮件/Custom Rate Chart及日期"></label><label>官网历史未覆盖时的单周费率覆盖（0.26=26%）<input type="number" min="0" max="1" step="0.0025" v-model="defaultSettings.fuelRate" @change="result=[]"></label><label>燃油适用周及官网来源<input v-model="defaultSettings.fuelEvidence" @change="result=[]" placeholder="仅单周账单可统一填；多周请逐行提供"></label></div></details><details><summary>查看内置合约规则及官网版本（{{defaultCatalog.length}}项）</summary><div class="table-scroll"><table><thead><tr><th>项目</th><th>默认规则</th><th>依据</th></tr></thead><tbody><tr v-for="r in defaultCatalog"><td>{{r.项目}}</td><td style="white-space:normal;min-width:400px">{{r.默认规则}}</td><td style="white-space:normal">{{r.依据}}</td></tr></tbody></table></div><button class="text-button" @click="downloadDefaults">↓ 导出内置规则说明</button></details></div><div class="billing-upload-grid"><label class="upload-card"><strong>UPS原始账单</strong><input type="file" accept=".xlsx,.xls,.csv" @change="load($event,'bill')"><span>{{billName||'选择文件'}}</span></label><label v-if="ruleMode==='custom'" class="upload-card"><strong>自定义合约审核规则</strong><input type="file" accept=".xlsx,.xls,.csv" @change="load($event,'rule')"><span>{{ruleName||'选择文件'}}</span></label></div><button class="text-button" @click="template">↓ 下载填写模板（账单+合约规则+说明）</button><div class="notice">默认规则直接来自两份合约原文及UPS官方2026-09-07版公布价，不使用客户加价报价。两份合约按已生效执行，不要求填写生效日；不计算High Volume高货量旺季费用。未知费用/未覆盖官网版本仍按公布价原则，资料不足列待核实，不拿账单原价自证。</div><p v-if="importNotice" class="notice">{{importNotice}}</p><div v-if="books.bill" class="select-grid"><label>账单工作表<select v-model="billSheet" @change="readBill"><option v-for="s in books.bill.SheetNames">{{s}}</option></select></label><label>表头行<input type="number" min="1" v-model.number="headerRow" @change="readBill"></label></div><details v-if="headers.length"><summary>确认账单列映射（{{billRows.length}} 行）</summary><p class="muted">净额必须是该费用行的实收，不能选择整票合计。只有公布金额和折扣时，可勾选推算。分区及重量需与规则口径一致。</p><div class="select-grid"><label v-for="(k,i) in keys">{{k}}<select v-model="mapping[i]" @change="result=[]"><option :value="-1">未映射</option><option v-for="(h,j) in headers" :value="j">{{j+1}} · {{h}}</option></select></label></div><label><input type="checkbox" v-model="derive" @change="result=[]">无实收列时，用公布金额 − 折扣绝对值推算实收</label></details><div v-if="books.rule" class="select-grid"><label>规则工作表<select v-model="ruleSheet" @change="result=[]"><option v-for="s in books.rule.SheetNames">{{s}}</option></select></label></div><label>金额容差 USD <input type="number" min="0" step="0.01" v-model.number="tolerance" @change="result=[]"></label><div class="notice">折扣应收 = max(公布金额 × (1−减免比例), 最低净额)。最低净额只用于所属费用项，住宅等附加费单列；燃油按核实后的适用基数计算。相同运单的不同费用行不会被当作重复订单。退款、重复费用行、未知费用与规则缺失均列入待核实，不计入确认多收。</div><div class="action-row"><p>规则按账号、服务、费用、日期、分区及重量唯一匹配。</p><button class="primary" :disabled="busy||exporting||!books.bill||(ruleMode==='custom'&&!books.rule)" @click="run">{{busy?'审核中…':'开始审核 →'}}</button></div><p v-if="error" class="error" role="alert">{{error}}</p></section><template v-if="result.length"><template v-if="shipmentReport"><section class="panel"><h2>HWT／Ground全部费用汇总</h2><p>原始 {{shipmentReport.rawCount}} 行 · 账单实收 USD {{shipmentReport.total.toFixed(2)}}。燃油、DAS、EDAS、住宅及其他服务费计入所属HWT/Ground总费用；调整按可追溯原单归属，无法归属单列。账号费用也计入账单合计。零金额更正不计收费金额，但参与审核费计件。HWT基础费按第一份合约，最低均重20LB、最低每票$72；HWT DAS/EDAS整票按公布价，Shipment Residential Surcharge保留70% OFF申诉。已核算申诉 USD {{shipmentReport.confirmedOvercharge.toFixed(2)}}，与Dispute合计一致。</p><div class="table-scroll"><table><thead><tr><th v-for="k in Object.keys(shipmentReport.displaySummary[0]||{})">{{k}}</th></tr></thead><tbody><tr v-for="r in shipmentReport.displaySummary"><td v-for="v in r">{{v}}</td></tr></tbody></table></div><p class="notice">整票完成 {{shipmentReport.shipments.filter(s=>s['整票核算完整']==='是').length}} 票；未完成 {{shipmentReport.shipments.filter(s=>s['整票核算完整']!=='是').length}} 票。待核原因逐项列在下方及导出的「待核清单」，无申诉金额不代表审核通过。</p><p>调整 {{shipmentReport.adjustments.length}} 票，其中 {{shipmentReport.missingOriginal}} 票本账单缺少原基础费，需历史账单配对。{{shipmentReport.info.length}} 行零金额/信息记录单独保留。</p><details v-for="section in [{title:'Ground Commercial / Residential分类汇总',data:shipmentReport.serviceSummary},{title:'待核清单（未完成不代表通过）',data:shipmentReport.pendingChecks||[]},{title:'已出账超收明细',data:shipmentReport.overcharges},{title:'HWT整票明细',data:shipmentReport.shipments.filter(r=>r['类别']==='HWT')},{title:'Ground整票明细',data:shipmentReport.shipments.filter(r=>r['类别']==='Ground')},{title:'HWT附加费',data:shipmentReport.hwtComponents},{title:'Additional Handling明细',data:shipmentReport.additionalHandlingDetails},{title:'Billing Adjustment收费条件核对',data:shipmentReport.billingAudit},{title:'审核费计件明细',data:shipmentReport.correctionPackages},{title:'账号及账单级费用',data:shipmentReport.accounts},{title:'调整及缺原单记录',data:shipmentReport.adjustments}]"><summary>{{section.title}}（{{section.data.length}}）</summary><div class="table-scroll"><table><thead><tr><th v-for="k in Object.keys(section.data[0]||{})">{{k}}</th></tr></thead><tbody><tr v-for="r in section.data.slice(0,100)"><td v-for="v in r">{{v}}</td></tr></tbody></table></div><p>页面显示前100条，导出包含全部。</p></details></section></template><section v-if="!shipmentReport" class="stats"><div class="stat"><span>费用行辅助核对</span><strong>{{result.length}}</strong><div>通过 {{counts['通过']||0}} 行</div></div><div class="stat warning"><span>多收异常</span><strong>{{counts['多收异常']||0}}</strong><div>超收金额 USD {{total.toFixed(2)}}</div></div><div class="stat warning"><span>费用行待核实</span><strong>{{counts['待核实']||0}}</strong><div>资料缺失、调整或重复</div></div><div class="stat"><span>少收提示</span><strong>{{counts['少收提示']||0}}</strong><div>High Volume不参与审核 {{counts['不参与审核']||0}} 行；少收不抵减多收</div></div></section><section class="panel"><div class="section-heading"><h2>02　审查报告</h2><button v-if="shipmentReport" class="download" @click="downloadDispute" :disabled="exporting||busy">↓ 导出Dispute表</button><button class="primary" :disabled="exporting||busy" @click="downloadCSV">↓ 导出审核报告CSV</button><button class="download" :disabled="exporting||busy" @click="download">{{exporting?'正在导出…':'↓ 导出审核报告Excel'}}</button></div><p v-if="exportMessage" class="notice" role="status">{{exportMessage}} <button v-if="exporting" class="text-button" @click="cancelExport">取消导出</button></p><p v-for="f in exportFiles" :key="f.name"><a v-if="f.url" :href="f.url" :download="f.name">↓ {{f.name}}</a><span v-else>已保存：{{f.name}}</span></p><p>金额为已核算项目的出账超收金额；以UPS已出账金额为实收依据，合并更正及退款后重算完整合约应收。Dispute表包含已完整核算的超收订单及可独立核算的超收附加费；账号费用另页列示；Payment Processing Fee暂不纳入Dispute，审核报告仍保留。未核算项目不纳入申诉。默认报告包含汇总、逐票费用、附加费和调整费核对；Dispute包含申诉项目及对应原始收费记录。账单尺寸/重量按UPS已出账更正结果核算。</p><div class="toolbar"><select v-model="filter"><option>全部</option><option>多收异常</option><option>待核实</option><option>少收提示</option><option>不参与审核</option><option>通过</option><option>已并入整票</option></select><input class="search" v-model="search" placeholder="搜索运单 / 账单 / 原因" @input="page=1"></div><div class="table-scroll"><table><thead><tr><th v-for="k in displayKeys">{{k}}</th></tr></thead><tbody><tr v-for="r in visible"><td v-for="k in displayKeys" :class="k==='状态'&&r[k]!=='通过'?'warning-text':''">{{r[k]}}</td></tr></tbody></table></div><div class="pagination"><span>筛选 {{filtered.length}} 行 · 导出包含全部结果</span><button :disabled="page<=1" @click="page--">上一页</button><span>{{page}} / {{pages}}</span><button :disabled="page>=pages" @click="page++">下一页</button></div></section></template></main>`;
 				document.body.appendChild(el);
 				let btn = document.getElementById("ups-mode");
 				if (!btn) {
@@ -82482,11 +82422,13 @@
 							]);
 							if (!keys.has(key)) continue;
 							if (!bucket.has(key)) bucket.set(key, []);
-							bucket.get(key).push({
-								row,
-								invoice: inv,
-								isCurrent: currentInvoices.has(inv.id),
-							});
+							bucket
+								.get(key)
+								.push({
+									row,
+									invoice: inv,
+									isCurrent: currentInvoices.has(inv.id),
+								});
 						}
 					const result = [];
 					for (const [key, entries] of bucket) {
@@ -82759,48 +82701,6 @@
 				);
 				refresh().catch((e) => (msg.textContent = e.message));
 			})(globalThis);
-		</script>
-		<script>
-			(function () {
-				function notifyParent() {
-					try {
-						if (window.parent && window.parent !== window) {
-							window.parent.postMessage({ __quoteCustomerHeight: 1 }, "*");
-						}
-					} catch (e) {}
-				}
-				let pending = null;
-				function schedule() {
-					if (pending) cancelAnimationFrame(pending);
-					pending = requestAnimationFrame(function () {
-						notifyParent();
-						pending = null;
-					});
-				}
-				if (
-					document.readyState === "complete" ||
-					document.readyState === "interactive"
-				) {
-					setTimeout(schedule, 0);
-				} else {
-					window.addEventListener("DOMContentLoaded", schedule, { once: true });
-				}
-				try {
-					const mo = new MutationObserver(schedule);
-					mo.observe(document.documentElement, {
-						childList: true,
-						subtree: true,
-						characterData: true,
-					});
-				} catch (e) {}
-				try {
-					const ro = new ResizeObserver(schedule);
-					ro.observe(document.documentElement);
-					ro.observe(document.body);
-				} catch (e) {}
-				window.addEventListener("load", schedule);
-				window.addEventListener("resize", schedule);
-			})();
 		</script>
 	</body>
 </html>

@@ -9,21 +9,26 @@ process.env.BROWSER ||= 'chrome'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
-  },
-  server: {
-    port: 6662,
-    open: true,
-    proxy: {
-      // 后端 context-path 为 /api，代理时不重写
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true
-      }
-    }
-  }
-})
+	plugins: [vue()],
+	resolve: {
+		alias: {
+			"@": fileURLToPath(new URL("./src", import.meta.url)),
+		},
+	},
+	server: {
+		port: 6662,
+		open: true,
+		proxy: {
+			// 后端 context-path 为 /api，代理时不重写
+			"/api": {
+				target: "http://localhost:8080",
+				changeOrigin: true,
+			},
+			// 远程报价文件目录，开发环境代理绕过 CORS
+			"/files": {
+				target: "http://121.43.236.24",
+				changeOrigin: true,
+			},
+		},
+	},
+});
