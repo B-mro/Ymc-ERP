@@ -74,18 +74,18 @@
 							>
 						</div>
 						<div class="fixed-quote-home">
-							<strong>上传固定报价表（保存后可反复使用，支持多选）</strong
-							><input
-								class="fixed-quote-home-input"
-								type="file"
-								accept=".xlsx,.xls"
-								multiple
-								@change="uploadFixedQuotes"
-								:disabled="busy"
-							/>
-							<p class="muted">
-								选择Excel后自动保存到当前承运商；首次上传后可设置客户对应关系。
-							</p>
+							<strong>固定报价表如果缺失，请去功能设计，上传固定报价表到服务器。</strong>
+								<!-- <input
+									class="fixed-quote-home-input"
+									type="file"
+									accept=".xlsx,.xls"
+									multiple
+									@change="uploadFixedQuotes"
+									:disabled="busy"
+								/>
+								<p class="muted">
+									选择Excel后自动保存到当前承运商；首次上传后可设置客户对应关系。
+								</p> -->
 							<button
 								class="primary"
 								@click="openQuoteManager"
