@@ -1,32 +1,998 @@
-/*SG-AUDIT:finance-31.js*/(function(root){'use strict';
-const MAX_CELLS=1500000,BATCH_CELLS=12000;
-function workerMain(){let wb,sh,meta=[],current,row,theme,forceAudit=false,entries=[],seed=null,sheetNames=[],stream=null;const enc=new TextEncoder(),dec=new TextDecoder();
-function styled(bytes,theme){if(!theme)return bytes;const zip=XLSX.CFB.read(new Uint8Array(bytes),{type:'array'}),prefix=zip.FullPaths[0],put=(p,s)=>XLSX.CFB.utils.cfb_add(zip,prefix+p,enc.encode(s));const audit=forceAudit||meta.some(m=>m.options?.audit);let styles=audit?theme.audit.stylesXML:theme.stylesXML.replace('numFmts count="2"','numFmts count="3"').replace('</x:numFmts>','<x:numFmt numFmtId="202" formatCode="0.00%"/></x:numFmts>').replace('cellXfs count="22"','cellXfs count="23"').replace('</x:cellXfs>','<x:xf numFmtId="202" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></x:cellXfs>');put('xl/styles.xml',styles);
-for(let i=0;i<wb.SheetNames.length;i++){const name=wb.SheetNames[i],sheet=wb.Sheets[name],m=meta[i],path='xl/worksheets/sheet'+(i+1)+'.xml';let xml=dec.decode(XLSX.CFB.find(zip,prefix+path).content);xml=xml.replace(/<c\b([^>]*)>/g,(tag,attr)=>{const rc=attr.match(/\br="([A-Z]+)(\d+)"/);if(!rc)return tag;const col=XLSX.utils.decode_col(rc[1]),rn=Number(rc[2]),label=String(sheet['A'+rn]?.v||''),cell=sheet[rc[1]+rc[2]],h=m.headers[col]||'';let style=rn===1?4:1;if(m.options?.audit){const t=theme.audit.sheets[m.options.template],h=m.options.headers[col]||'',def=t.cols[h],value=cell?.v;if(m.options.template==='审核汇总'){style=t.styles[rc[1]+rc[2]]??(typeof value==='number'?rn>=28?(col===4?15:8):10:rn>=13&&rn<=24?col===0?11:2:3);}else{style=rn===2?1:rn===4?(def?.headerStyle??9):typeof value==='number'?(def?.dataStyle??10):3;if(rn>=5&&/Discount|支付比例/.test(h)&&typeof value==='number')style=19;if(m.options.notesStart&&rn>=m.options.notesStart)style=3;}return '<c'+attr.replace(/\s+s="[^"]*"/,'')+' s="'+style+'">';}if(name==='Claim Summary'){style=label==='Claim Category'?4:rn===1?7:label==='Total'||label==='Total Requested Credit'?(typeof cell?.v==='number'?21:20):typeof cell?.v==='number'&&(col>=3||/Credit|Invoice Total/.test(label))?12:1;}else if(rn>1&&typeof cell?.v==='number')style=/Discount|支付比例|费率|减免比例/.test(h)?22:/Requested Credit/.test(h)?14:/Row|行数|件数|票数|序号|Records|Shipments|^Zone$/.test(h)?1:6;return '<c'+attr.replace(/\s+s="[^"]*"/,'')+' s="'+style+'">';});if(m.freeze){const p=m.freeze,view='<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="'+p.xSplit+'" ySplit="'+p.ySplit+'" topLeftCell="'+p.topLeftCell+'" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';if(/<sheetViews[\s>]/.test(xml))xml=xml.replace(/<sheetViews[\s\S]*?<\/sheetViews>/,view);else xml=xml.replace(/<sheetFormatPr|<cols|<sheetData/,match=>view+match);}put(path,xml);}
-return XLSX.CFB.write(zip,{type:'array',fileType:'zip',compression:true});}
+/**
+ * audit-xlsx-export.js —— UPS 审核报告 Excel 流式导出引擎
+ *
+ * 本模块在 Worker 线程内完成 **大规模审核报告** 的 Excel (.xlsx) 生成，
+ * 利用 XLSX 的 CFB（Compound File Binary）底层 API + ZIP 手动写入，
+ * 实现 **不爆内存** 的百万级行流式导出。
+ *
+ * 与前端直接 `XLSX.writeFile()` 的区别：
+ *   - 常规 XLSX.writeFile 会把整个工作簿加载到 JS 内存 → 大账单（>200k 行）直接 OOM
+ *   - 本模块采用 SAX + 手动 CFB ZIP 组装，逐 sheet 写入、逐行释放
+ *   - 内置样式主题（theme XML 模板替换），审计报告有 17 种样式
+ *
+ * 关键常量与流程：
+ *   - MAX_CELLS = 1,500,000  单元格总量上限（单文件）
+ *   - BATCH_CELLS = 12,000   每批流式写入单元格数
+ *   - workerMain()           : Worker 线程主入口，从 postMessage 接收 job，
+ *                             调用 streamAppend 逐行构建，完成后 postMessage 回传
+ *
+ * 样式系统 styled(bytes, theme, forceAudit)：
+ *   直接 ZIP 解压 → 修改 xl/styles.xml / xl/worksheets/sheetN.xml → 重新压缩
+ *   - 审核模式（audit=true）：theme.audit.stylesXML 含 17 种样式（表头/数据/异常/合计等）
+ *   - 普通模式：theme.stylesXML 含 22 种基础样式 + 自动注入 0.00% 百分比格式
+ *   - 列宽自适应 / 冻结窗格（freeze）/ 条件样式（正数红/负数绿/合计行蓝）
+ *
+ * CFB ZIP 底层操作：
+ *   - members(bytes)         : 从 ZIP 二进制直接读取每个文件条目（不解压完整文件）
+ *   - put(path, content)     : 在 ZIP 中直接替换指定路径条目
+ *   - XLSX.CFB.utils.cfb_add : CFB 容器内添加/替换文件
+ *   - CRC32 计算表（预生成 256 项加速）
+ *
+ * Worker 线程通信协议：
+ *   主线程 postMessage({ sheets, theme, forceAudit, ... }) →
+ *   workerMain() 流式处理 → 每 BATCH_CELLS 行 postMessage 进度 →
+ *   完成后 postMessage({ type:'done', bytes: ZIPArrayBuffer })
+ *
+ * 对外暴露：root.ShipGridAuditXLSX = { workerMain, createSession, styled, members }
+ *
+ * 依赖：XLSX 库（XLSX.CFB、XLSX.utils.decode_col）、TextEncoder/TextDecoder
+ */
+/*SG-AUDIT:finance-31.js*/ (function (root) {
+	"use strict";
+	const MAX_CELLS = 1500000,
+		BATCH_CELLS = 12000;
+	function workerMain() {
+		let wb,
+			sh,
+			meta = [],
+			current,
+			row,
+			theme,
+			forceAudit = false,
+			entries = [],
+			seed = null,
+			sheetNames = [],
+			stream = null;
+		const enc = new TextEncoder(),
+			dec = new TextDecoder();
+		function styled(bytes, theme) {
+			if (!theme) return bytes;
+			const zip = XLSX.CFB.read(new Uint8Array(bytes), { type: "array" }),
+				prefix = zip.FullPaths[0],
+				put = (p, s) => XLSX.CFB.utils.cfb_add(zip, prefix + p, enc.encode(s));
+			const audit = forceAudit || meta.some((m) => m.options?.audit);
+			let styles = audit
+				? theme.audit.stylesXML
+				: theme.stylesXML
+						.replace('numFmts count="2"', 'numFmts count="3"')
+						.replace(
+							"</x:numFmts>",
+							'<x:numFmt numFmtId="202" formatCode="0.00%"/></x:numFmts>',
+						)
+						.replace('cellXfs count="22"', 'cellXfs count="23"')
+						.replace(
+							"</x:cellXfs>",
+							'<x:xf numFmtId="202" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></x:cellXfs>',
+						);
+			put("xl/styles.xml", styles);
+			for (let i = 0; i < wb.SheetNames.length; i++) {
+				const name = wb.SheetNames[i],
+					sheet = wb.Sheets[name],
+					m = meta[i],
+					path = "xl/worksheets/sheet" + (i + 1) + ".xml";
+				let xml = dec.decode(XLSX.CFB.find(zip, prefix + path).content);
+				xml = xml.replace(/<c\b([^>]*)>/g, (tag, attr) => {
+					const rc = attr.match(/\br="([A-Z]+)(\d+)"/);
+					if (!rc) return tag;
+					const col = XLSX.utils.decode_col(rc[1]),
+						rn = Number(rc[2]),
+						label = String(sheet["A" + rn]?.v || ""),
+						cell = sheet[rc[1] + rc[2]],
+						h = m.headers[col] || "";
+					let style = rn === 1 ? 4 : 1;
+					if (m.options?.audit) {
+						const t = theme.audit.sheets[m.options.template],
+							h = m.options.headers[col] || "",
+							def = t.cols[h],
+							value = cell?.v;
+						if (m.options.template === "审核汇总") {
+							style =
+								t.styles[rc[1] + rc[2]] ??
+								(typeof value === "number"
+									? rn >= 28
+										? col === 4
+											? 15
+											: 8
+										: 10
+									: rn >= 13 && rn <= 24
+										? col === 0
+											? 11
+											: 2
+										: 3);
+						} else {
+							style =
+								rn === 2
+									? 1
+									: rn === 4
+										? (def?.headerStyle ?? 9)
+										: typeof value === "number"
+											? (def?.dataStyle ?? 10)
+											: 3;
+							if (
+								rn >= 5 &&
+								/Discount|支付比例/.test(h) &&
+								typeof value === "number"
+							)
+								style = 19;
+							if (m.options.notesStart && rn >= m.options.notesStart) style = 3;
+						}
+						return (
+							"<c" + attr.replace(/\s+s="[^"]*"/, "") + ' s="' + style + '">'
+						);
+					}
+					if (name === "Claim Summary") {
+						style =
+							label === "Claim Category"
+								? 4
+								: rn === 1
+									? 7
+									: label === "Total" || label === "Total Requested Credit"
+										? typeof cell?.v === "number"
+											? 21
+											: 20
+										: typeof cell?.v === "number" &&
+											  (col >= 3 || /Credit|Invoice Total/.test(label))
+											? 12
+											: 1;
+					} else if (rn > 1 && typeof cell?.v === "number")
+						style = /Discount|支付比例|费率|减免比例/.test(h)
+							? 22
+							: /Requested Credit/.test(h)
+								? 14
+								: /Row|行数|件数|票数|序号|Records|Shipments|^Zone$/.test(h)
+									? 1
+									: 6;
+					return (
+						"<c" + attr.replace(/\s+s="[^"]*"/, "") + ' s="' + style + '">'
+					);
+				});
+				if (m.freeze) {
+					const p = m.freeze,
+						view =
+							'<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="' +
+							p.xSplit +
+							'" ySplit="' +
+							p.ySplit +
+							'" topLeftCell="' +
+							p.topLeftCell +
+							'" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';
+					if (/<sheetViews[\s>]/.test(xml))
+						xml = xml.replace(/<sheetViews[\s\S]*?<\/sheetViews>/, view);
+					else
+						xml = xml.replace(
+							/<sheetFormatPr|<cols|<sheetData/,
+							(match) => view + match,
+						);
+				}
+				put(path, xml);
+			}
+			return XLSX.CFB.write(zip, {
+				type: "array",
+				fileType: "zip",
+				compression: true,
+			});
+		}
 
-// Keep compressed worksheet members, releasing each cell graph before the next sheet.
-function members(bytes){const a=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes),v=new DataView(a.buffer,a.byteOffset,a.byteLength);let end=a.length-22;while(end>=Math.max(0,a.length-65557)&&v.getUint32(end,true)!==0x06054b50)end--;if(end<0)throw Error('Excel ZIP目录缺失');let pos=v.getUint32(end+16,true),out=[];for(let i=0;i<v.getUint16(end+10,true);i++){if(v.getUint32(pos,true)!==0x02014b50)throw Error('Excel ZIP目录无效');const n=v.getUint16(pos+28,true),extra=v.getUint16(pos+30,true),comment=v.getUint16(pos+32,true),local=v.getUint32(pos+42,true),size=v.getUint32(pos+20,true),start=local+30+v.getUint16(local+26,true)+v.getUint16(local+28,true);out.push({name:dec.decode(a.subarray(pos+46,pos+46+n)),method:v.getUint16(pos+10,true),crc:v.getUint32(pos+16,true),size:v.getUint32(pos+24,true),data:a.slice(start,start+size)});pos+=46+n+extra+comment;}return out;}
-const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let i=0;i<8;i++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
-function stored(name,text){const data=enc.encode(text);let c=0xffffffff;for(const b of data)c=crcTable[(c^b)&255]^(c>>>8);return {name,method:0,crc:(c^0xffffffff)>>>0,size:data.length,data};}
-const escapeXML=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-function zip(all){const pieces=[],central=[];let offset=0,cdSize=0;for(const e of all){const name=enc.encode(e.name),local=new Uint8Array(30+name.length),l=new DataView(local.buffer),dir=new Uint8Array(46+name.length),d=new DataView(dir.buffer);l.setUint32(0,0x04034b50,true);l.setUint16(4,20,true);l.setUint16(6,0x800,true);l.setUint16(8,e.method,true);l.setUint32(14,e.crc,true);l.setUint32(18,e.data.length,true);l.setUint32(22,e.size,true);l.setUint16(26,name.length,true);local.set(name,30);d.setUint32(0,0x02014b50,true);d.setUint16(4,20,true);d.setUint16(6,20,true);d.setUint16(8,0x800,true);d.setUint16(10,e.method,true);d.setUint32(16,e.crc,true);d.setUint32(20,e.data.length,true);d.setUint32(24,e.size,true);d.setUint16(28,name.length,true);d.setUint32(42,offset,true);dir.set(name,46);pieces.push(local,e.data);central.push(dir);offset+=local.length+e.data.length;cdSize+=dir.length;}if(offset+cdSize>0xffffffff||all.length>65535)throw Error('单文件超过普通Excel ZIP容量限制');const end=new Uint8Array(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,all.length,true);v.setUint16(10,all.length,true);v.setUint32(12,cdSize,true);v.setUint32(16,offset,true);const out=new Uint8Array(offset+cdSize+22);let at=0;for(const b of [...pieces,...central,end]){out.set(b,at);at+=b.length;}return out.buffer;}
-function keepSheet(){const initial=XLSX.write(wb,{type:'array',bookType:'xlsx',compression:true,bookSST:false}),styledBytes=styled(initial,theme),files=members(styledBytes);if(files.some(x=>x.name==='xl/sharedStrings.xml'))throw Error('报告不应生成跨工作表共享字符串');if(!seed){seed={};const cfb=XLSX.CFB.read(new Uint8Array(styledBytes),{type:'array'});for(const name of ['xl/workbook.xml','xl/_rels/workbook.xml.rels','[Content_Types].xml'])seed[name]=dec.decode(XLSX.CFB.find(cfb,cfb.FullPaths[0]+name).content);entries.push(...files.filter(x=>!/^xl\/worksheets\//.test(x.name)&&!Object.hasOwn(seed,x.name)));}const sheet=files.find(x=>x.name==='xl/worksheets/sheet1.xml');if(!sheet)throw Error('工作表XML缺失');sheet.name='xl/worksheets/sheet'+(sheetNames.length+1)+'.xml';entries.push(sheet);sheetNames.push(current.name);wb=null;meta=[];}
-function finishBook(){if(!seed)throw Error('没有可导出的报告');let book=seed['xl/workbook.xml'].replace(/<sheets>[\s\S]*?<\/sheets>/,'<sheets>'+sheetNames.map((name,i)=>'<sheet name="'+escapeXML(name)+'" sheetId="'+(i+1)+'" r:id="rIdSG'+(i+1)+'"/>').join('')+'</sheets>');let rel=seed['xl/_rels/workbook.xml.rels'].replace(/<Relationship\b[^>]*Type="[^"]*\/worksheet"[^>]*\/>/g,'').replace('</Relationships>',sheetNames.map((_,i)=>'<Relationship Id="rIdSG'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')+'</Relationships>');let types=seed['[Content_Types].xml'].replace(/<Override\b[^>]*PartName="\/xl\/worksheets\/[^\"]+"[^>]*\/>/g,'').replace('</Types>',sheetNames.map((_,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'</Types>');entries.push(stored('xl/workbook.xml',book),stored('xl/_rels/workbook.xml.rels',rel),stored('[Content_Types].xml',types));const bytes=zip(entries);entries=[];seed=null;return bytes;}
+		// Keep compressed worksheet members, releasing each cell graph before the next sheet.
+		function members(bytes) {
+			const a = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes),
+				v = new DataView(a.buffer, a.byteOffset, a.byteLength);
+			let end = a.length - 22;
+			while (
+				end >= Math.max(0, a.length - 65557) &&
+				v.getUint32(end, true) !== 0x06054b50
+			)
+				end--;
+			if (end < 0) throw Error("Excel ZIP目录缺失");
+			let pos = v.getUint32(end + 16, true),
+				out = [];
+			for (let i = 0; i < v.getUint16(end + 10, true); i++) {
+				if (v.getUint32(pos, true) !== 0x02014b50)
+					throw Error("Excel ZIP目录无效");
+				const n = v.getUint16(pos + 28, true),
+					extra = v.getUint16(pos + 30, true),
+					comment = v.getUint16(pos + 32, true),
+					local = v.getUint32(pos + 42, true),
+					size = v.getUint32(pos + 20, true),
+					start =
+						local +
+						30 +
+						v.getUint16(local + 26, true) +
+						v.getUint16(local + 28, true);
+				out.push({
+					name: dec.decode(a.subarray(pos + 46, pos + 46 + n)),
+					method: v.getUint16(pos + 10, true),
+					crc: v.getUint32(pos + 16, true),
+					size: v.getUint32(pos + 24, true),
+					data: a.slice(start, start + size),
+				});
+				pos += 46 + n + extra + comment;
+			}
+			return out;
+		}
+		const crcTable = Array.from({ length: 256 }, (_, n) => {
+			let c = n;
+			for (let i = 0; i < 8; i++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+			return c >>> 0;
+		});
+		function stored(name, text) {
+			const data = enc.encode(text);
+			let c = 0xffffffff;
+			for (const b of data) c = crcTable[(c ^ b) & 255] ^ (c >>> 8);
+			return {
+				name,
+				method: 0,
+				crc: (c ^ 0xffffffff) >>> 0,
+				size: data.length,
+				data,
+			};
+		}
+		const escapeXML = (s) =>
+			String(s)
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;")
+				.replace(/"/g, "&quot;")
+				.replace(/'/g, "&apos;");
+		function zip(all) {
+			const pieces = [],
+				central = [];
+			let offset = 0,
+				cdSize = 0;
+			for (const e of all) {
+				const name = enc.encode(e.name),
+					local = new Uint8Array(30 + name.length),
+					l = new DataView(local.buffer),
+					dir = new Uint8Array(46 + name.length),
+					d = new DataView(dir.buffer);
+				l.setUint32(0, 0x04034b50, true);
+				l.setUint16(4, 20, true);
+				l.setUint16(6, 0x800, true);
+				l.setUint16(8, e.method, true);
+				l.setUint32(14, e.crc, true);
+				l.setUint32(18, e.data.length, true);
+				l.setUint32(22, e.size, true);
+				l.setUint16(26, name.length, true);
+				local.set(name, 30);
+				d.setUint32(0, 0x02014b50, true);
+				d.setUint16(4, 20, true);
+				d.setUint16(6, 20, true);
+				d.setUint16(8, 0x800, true);
+				d.setUint16(10, e.method, true);
+				d.setUint32(16, e.crc, true);
+				d.setUint32(20, e.data.length, true);
+				d.setUint32(24, e.size, true);
+				d.setUint16(28, name.length, true);
+				d.setUint32(42, offset, true);
+				dir.set(name, 46);
+				pieces.push(local, e.data);
+				central.push(dir);
+				offset += local.length + e.data.length;
+				cdSize += dir.length;
+			}
+			if (offset + cdSize > 0xffffffff || all.length > 65535)
+				throw Error("单文件超过普通Excel ZIP容量限制");
+			const end = new Uint8Array(22),
+				v = new DataView(end.buffer);
+			v.setUint32(0, 0x06054b50, true);
+			v.setUint16(8, all.length, true);
+			v.setUint16(10, all.length, true);
+			v.setUint32(12, cdSize, true);
+			v.setUint32(16, offset, true);
+			const out = new Uint8Array(offset + cdSize + 22);
+			let at = 0;
+			for (const b of [...pieces, ...central, end]) {
+				out.set(b, at);
+				at += b.length;
+			}
+			return out.buffer;
+		}
+		function keepSheet() {
+			const initial = XLSX.write(wb, {
+					type: "array",
+					bookType: "xlsx",
+					compression: true,
+					bookSST: false,
+				}),
+				styledBytes = styled(initial, theme),
+				files = members(styledBytes);
+			if (files.some((x) => x.name === "xl/sharedStrings.xml"))
+				throw Error("报告不应生成跨工作表共享字符串");
+			if (!seed) {
+				seed = {};
+				const cfb = XLSX.CFB.read(new Uint8Array(styledBytes), {
+					type: "array",
+				});
+				for (const name of [
+					"xl/workbook.xml",
+					"xl/_rels/workbook.xml.rels",
+					"[Content_Types].xml",
+				])
+					seed[name] = dec.decode(
+						XLSX.CFB.find(cfb, cfb.FullPaths[0] + name).content,
+					);
+				entries.push(
+					...files.filter(
+						(x) =>
+							!/^xl\/worksheets\//.test(x.name) && !Object.hasOwn(seed, x.name),
+					),
+				);
+			}
+			const sheet = files.find((x) => x.name === "xl/worksheets/sheet1.xml");
+			if (!sheet) throw Error("工作表XML缺失");
+			sheet.name = "xl/worksheets/sheet" + (sheetNames.length + 1) + ".xml";
+			entries.push(sheet);
+			sheetNames.push(current.name);
+			wb = null;
+			meta = [];
+		}
+		function finishBook() {
+			if (!seed) throw Error("没有可导出的报告");
+			let book = seed["xl/workbook.xml"].replace(
+				/<sheets>[\s\S]*?<\/sheets>/,
+				"<sheets>" +
+					sheetNames
+						.map(
+							(name, i) =>
+								'<sheet name="' +
+								escapeXML(name) +
+								'" sheetId="' +
+								(i + 1) +
+								'" r:id="rIdSG' +
+								(i + 1) +
+								'"/>',
+						)
+						.join("") +
+					"</sheets>",
+			);
+			let rel = seed["xl/_rels/workbook.xml.rels"]
+				.replace(/<Relationship\b[^>]*Type="[^"]*\/worksheet"[^>]*\/>/g, "")
+				.replace(
+					"</Relationships>",
+					sheetNames
+						.map(
+							(_, i) =>
+								'<Relationship Id="rIdSG' +
+								(i + 1) +
+								'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' +
+								(i + 1) +
+								'.xml"/>',
+						)
+						.join("") + "</Relationships>",
+				);
+			let types = seed["[Content_Types].xml"]
+				.replace(
+					/<Override\b[^>]*PartName="\/xl\/worksheets\/[^\"]+"[^>]*\/>/g,
+					"",
+				)
+				.replace(
+					"</Types>",
+					sheetNames
+						.map(
+							(_, i) =>
+								'<Override PartName="/xl/worksheets/sheet' +
+								(i + 1) +
+								'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>',
+						)
+						.join("") + "</Types>",
+				);
+			entries.push(
+				stored("xl/workbook.xml", book),
+				stored("xl/_rels/workbook.xml.rels", rel),
+				stored("[Content_Types].xml", types),
+			);
+			const bytes = zip(entries);
+			entries = [];
+			seed = null;
+			return bytes;
+		}
 
+		function setupSeed(bytes) {
+			const files = members(bytes);
+			seed = {};
+			const cfb = XLSX.CFB.read(new Uint8Array(bytes), { type: "array" });
+			for (const name of [
+				"xl/workbook.xml",
+				"xl/_rels/workbook.xml.rels",
+				"[Content_Types].xml",
+			])
+				seed[name] = dec.decode(
+					XLSX.CFB.find(cfb, cfb.FullPaths[0] + name).content,
+				);
+			entries.push(
+				...files.filter(
+					(x) =>
+						!/^xl\/worksheets\//.test(x.name) &&
+						!Object.hasOwn(seed, x.name) &&
+						x.name !== "xl/styles.xml",
+				),
+			);
+			const styles = forceAudit
+				? theme?.audit?.stylesXML
+				: theme?.stylesXML
+						?.replace('numFmts count="2"', 'numFmts count="3"')
+						.replace(
+							"</x:numFmts>",
+							'<x:numFmt numFmtId="202" formatCode="0.00%"/></x:numFmts>',
+						)
+						.replace('cellXfs count="22"', 'cellXfs count="23"')
+						.replace(
+							"</x:cellXfs>",
+							'<x:xf numFmtId="202" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></x:cellXfs>',
+						);
+			if (styles) entries.push(stored("xl/styles.xml", styles));
+			else entries.push(files.find((x) => x.name === "xl/styles.xml"));
+		}
+		function xmlText(value) {
+			return escapeXML(
+				String(value).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""),
+			);
+		}
+		function cellStyle(v, c, r) {
+			const o = current.options,
+				h = (o.headers || current.headers)[c] || "",
+				t = o.layout;
+			if (o.audit) {
+				if (o.template === "审核汇总")
+					return (
+						t.styles[XLSX.utils.encode_cell({ r: r - 1, c })] ??
+						(typeof v === "number"
+							? r >= 28
+								? c === 4
+									? 15
+									: 8
+								: 10
+							: r >= 13 && r <= 24
+								? c === 0
+									? 11
+									: 2
+								: 3)
+					);
+				let style =
+					r === 2
+						? 1
+						: r === 4
+							? (t.cols[h]?.headerStyle ?? 9)
+							: typeof v === "number"
+								? (t.cols[h]?.dataStyle ?? 10)
+								: 3;
+				if (r >= 5 && /Discount|支付比例/.test(h) && typeof v === "number")
+					style = 19;
+				if (o.notesStart && r >= o.notesStart) style = 3;
+				return style;
+			}
+			if (current.name === "Claim Summary") {
+				const label = String(current.label || "");
+				return label === "Claim Category"
+					? 4
+					: r === 1
+						? 7
+						: label === "Total" || label === "Total Requested Credit"
+							? typeof v === "number"
+								? 21
+								: 20
+							: typeof v === "number" &&
+								  (c >= 3 || /Credit|Invoice Total/.test(label))
+								? 12
+								: 1;
+			}
+			if (r === 1) return 4;
+			if (typeof v === "number")
+				return /Discount|支付比例|费率|减免比例/.test(h)
+					? 22
+					: /Requested Credit/.test(h)
+						? 14
+						: /Row|行数|件数|票数|序号|Records|Shipments|^Zone$/.test(h)
+							? 1
+							: 6;
+			return 1;
+		}
+		async function writeXML(text) {
+			const bytes = enc.encode(text);
+			stream.size += bytes.length;
+			for (const b of bytes)
+				stream.crc = crcTable[(stream.crc ^ b) & 255] ^ (stream.crc >>> 8);
+			await stream.writer.write(bytes);
+		}
+		async function streamRows(rows) {
+			let xml = "";
+			for (const values of rows) {
+				const r = ++row,
+					o = current.options,
+					t = o.layout;
+				current.label = values[0];
+				let height = o.audit
+					? r === 4
+						? t.headerHeight
+						: r < 5
+							? 22
+							: t.rowHeight
+					: r === 1
+						? 44
+						: current.headers.some((h) => /Reason|原因|依据/.test(h))
+							? 90
+							: 24;
+				if (o.template === "审核汇总" && r >= 13 && r <= 24)
+					height = Math.max(
+						28,
+						Math.ceil(String(values[1] || "").length / 100) * 16,
+					);
+				if (o.template === "审核汇总" && r === 27) height = 38;
+				if (o.notesStart && r >= o.notesStart)
+					height = Math.max(
+						28,
+						Math.ceil(String(values[0] || "").length / 75) * 16,
+					);
+				xml += '<row r="' + r + '" ht="' + height + '" customHeight="1">';
+				for (let c = 0; c < values.length; c++) {
+					const v = values[c];
+					if (v === null || v === undefined) continue;
+					const ref = XLSX.utils.encode_cell({ r: r - 1, c }),
+						style = cellStyle(v, c, r);
+					xml +=
+						'<c r="' +
+						ref +
+						'" s="' +
+						style +
+						'"' +
+						(typeof v === "number" && Number.isFinite(v)
+							? "><v>" + v + "</v></c>"
+							: typeof v === "boolean"
+								? ' t="b"><v>' + (v ? 1 : 0) + "</v></c>"
+								: ' t="inlineStr"><is><t xml:space="preserve">' +
+									xmlText(v) +
+									"</t></is></c>");
+				}
+				xml += "</row>";
+			}
+			await writeXML(xml);
+		}
+		async function openStream() {
+			let cs;
+			try {
+				cs = new CompressionStream("deflate-raw");
+			} catch (e) {
+				return false;
+			}
+			if (!seed) {
+				const tiny = XLSX.utils.book_new();
+				XLSX.utils.book_append_sheet(
+					tiny,
+					XLSX.utils.aoa_to_sheet([[""]]),
+					"Seed",
+				);
+				setupSeed(
+					XLSX.write(tiny, {
+						type: "array",
+						bookType: "xlsx",
+						compression: true,
+					}),
+				);
+			}
+			const parts = [],
+				reader = cs.readable.getReader();
+			stream = {
+				writer: cs.writable.getWriter(),
+				parts,
+				size: 0,
+				crc: 0xffffffff,
+				reading: (async () => {
+					while (true) {
+						const item = await reader.read();
+						if (item.done) break;
+						parts.push(item.value);
+					}
+				})(),
+			};
+			const o = current.options,
+				t = o.layout,
+				cols = (o.audit ? o.headers : current.headers)
+					.map(
+						(h, c) =>
+							'<col min="' +
+							(c + 1) +
+							'" max="' +
+							(c + 1) +
+							'" width="' +
+							(o.audit
+								? t.cols[h]?.width || 19
+								: /Reason|原因|依据|Scope/.test(h)
+									? 90
+									: /Description|费用名称/.test(h)
+										? 54
+										: /Number|运单/.test(h)
+											? 27
+											: 22) +
+							'" customWidth="1"/>',
+					)
+					.join("");
+			let views = "";
+			if (t?.freeze) {
+				const c = XLSX.utils.decode_cell(t.freeze);
+				views =
+					'<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="' +
+					c.c +
+					'" ySplit="' +
+					c.r +
+					'" topLeftCell="' +
+					t.freeze +
+					'" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';
+			}
+			await writeXML(
+				'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+					views +
+					"<cols>" +
+					cols +
+					"</cols><sheetData>",
+			);
+			row = 0;
+			await streamRows([current.headers]);
+			return true;
+		}
+		async function closeStream() {
+			const o = current.options;
+			let suffix = "</sheetData>";
+			if (
+				(o.audit && o.template !== "审核汇总") ||
+				(!o.audit && current.name !== "Claim Summary")
+			)
+				suffix +=
+					'<autoFilter ref="A' +
+					(o.audit ? 4 : 1) +
+					":" +
+					XLSX.utils.encode_col(
+						Math.max(0, (o.headers || current.headers).length - 1),
+					) +
+					Math.max(o.audit ? 4 : 1, row) +
+					'"/>';
+			let merges = [];
+			if (o.template === "审核汇总")
+				merges = Array.from(
+					{ length: 12 },
+					(_, i) => "B" + (13 + i) + ":L" + (13 + i),
+				);
+			if (o.notesStart)
+				for (let r = o.notesStart; r <= row; r++)
+					merges.push("A" + r + ":D" + r);
+			if (merges.length)
+				suffix +=
+					'<mergeCells count="' +
+					merges.length +
+					'">' +
+					merges.map((r) => '<mergeCell ref="' + r + '"/>').join("") +
+					"</mergeCells>";
+			await writeXML(suffix + "</worksheet>");
+			await stream.writer.close();
+			await stream.reading;
+			const data = new Uint8Array(
+				stream.parts.reduce((n, x) => n + x.length, 0),
+			);
+			let at = 0;
+			for (const part of stream.parts) {
+				data.set(part, at);
+				at += part.length;
+			}
+			entries.push({
+				name: "xl/worksheets/sheet" + (sheetNames.length + 1) + ".xml",
+				method: 8,
+				crc: (stream.crc ^ 0xffffffff) >>> 0,
+				size: stream.size,
+				data,
+			});
+			sheetNames.push(current.name);
+			stream = null;
+		}
 
-function setupSeed(bytes){const files=members(bytes);seed={};const cfb=XLSX.CFB.read(new Uint8Array(bytes),{type:'array'});for(const name of ['xl/workbook.xml','xl/_rels/workbook.xml.rels','[Content_Types].xml'])seed[name]=dec.decode(XLSX.CFB.find(cfb,cfb.FullPaths[0]+name).content);entries.push(...files.filter(x=>!/^xl\/worksheets\//.test(x.name)&&!Object.hasOwn(seed,x.name)&&x.name!=='xl/styles.xml'));const styles=forceAudit?theme?.audit?.stylesXML:theme?.stylesXML?.replace('numFmts count="2"','numFmts count="3"').replace('</x:numFmts>','<x:numFmt numFmtId="202" formatCode="0.00%"/></x:numFmts>').replace('cellXfs count="22"','cellXfs count="23"').replace('</x:cellXfs>','<x:xf numFmtId="202" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></x:cellXfs>');if(styles)entries.push(stored('xl/styles.xml',styles));else entries.push(files.find(x=>x.name==='xl/styles.xml'));}
-function xmlText(value){return escapeXML(String(value).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,''));}
-function cellStyle(v,c,r){const o=current.options,h=(o.headers||current.headers)[c]||'',t=o.layout;if(o.audit){if(o.template==='审核汇总')return t.styles[XLSX.utils.encode_cell({r:r-1,c})]??(typeof v==='number'?r>=28?(c===4?15:8):10:r>=13&&r<=24?c===0?11:2:3);let style=r===2?1:r===4?(t.cols[h]?.headerStyle??9):typeof v==='number'?(t.cols[h]?.dataStyle??10):3;if(r>=5&&/Discount|支付比例/.test(h)&&typeof v==='number')style=19;if(o.notesStart&&r>=o.notesStart)style=3;return style;}if(current.name==='Claim Summary'){const label=String(current.label||'');return label==='Claim Category'?4:r===1?7:label==='Total'||label==='Total Requested Credit'?(typeof v==='number'?21:20):typeof v==='number'&&(c>=3||/Credit|Invoice Total/.test(label))?12:1;}if(r===1)return 4;if(typeof v==='number')return /Discount|支付比例|费率|减免比例/.test(h)?22:/Requested Credit/.test(h)?14:/Row|行数|件数|票数|序号|Records|Shipments|^Zone$/.test(h)?1:6;return 1;}
-async function writeXML(text){const bytes=enc.encode(text);stream.size+=bytes.length;for(const b of bytes)stream.crc=crcTable[(stream.crc^b)&255]^(stream.crc>>>8);await stream.writer.write(bytes);}
-async function streamRows(rows){let xml='';for(const values of rows){const r=++row,o=current.options,t=o.layout;current.label=values[0];let height=o.audit?(r===4?t.headerHeight:r<5?22:t.rowHeight):r===1?44:current.headers.some(h=>/Reason|原因|依据/.test(h))?90:24;if(o.template==='审核汇总'&&r>=13&&r<=24)height=Math.max(28,Math.ceil(String(values[1]||'').length/100)*16);if(o.template==='审核汇总'&&r===27)height=38;if(o.notesStart&&r>=o.notesStart)height=Math.max(28,Math.ceil(String(values[0]||'').length/75)*16);xml+='<row r="'+r+'" ht="'+height+'" customHeight="1">';for(let c=0;c<values.length;c++){const v=values[c];if(v===null||v===undefined)continue;const ref=XLSX.utils.encode_cell({r:r-1,c}),style=cellStyle(v,c,r);xml+='<c r="'+ref+'" s="'+style+'"'+(typeof v==='number'&&Number.isFinite(v)?'><v>'+v+'</v></c>':typeof v==='boolean'?' t="b"><v>'+(v?1:0)+'</v></c>':' t="inlineStr"><is><t xml:space="preserve">'+xmlText(v)+'</t></is></c>');}xml+='</row>';}await writeXML(xml);}
-async function openStream(){let cs;try{cs=new CompressionStream('deflate-raw');}catch(e){return false;}if(!seed){const tiny=XLSX.utils.book_new();XLSX.utils.book_append_sheet(tiny,XLSX.utils.aoa_to_sheet([['']]),'Seed');setupSeed(XLSX.write(tiny,{type:'array',bookType:'xlsx',compression:true}));}const parts=[],reader=cs.readable.getReader();stream={writer:cs.writable.getWriter(),parts,size:0,crc:0xffffffff,reading:(async()=>{while(true){const item=await reader.read();if(item.done)break;parts.push(item.value);}})()};const o=current.options,t=o.layout,cols=(o.audit?o.headers:current.headers).map((h,c)=>'<col min="'+(c+1)+'" max="'+(c+1)+'" width="'+(o.audit?(t.cols[h]?.width||19):/Reason|原因|依据|Scope/.test(h)?90:/Description|费用名称/.test(h)?54:/Number|运单/.test(h)?27:22)+'" customWidth="1"/>').join('');let views='';if(t?.freeze){const c=XLSX.utils.decode_cell(t.freeze);views='<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="'+c.c+'" ySplit="'+c.r+'" topLeftCell="'+t.freeze+'" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';}await writeXML('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+views+'<cols>'+cols+'</cols><sheetData>');row=0;await streamRows([current.headers]);return true;}
-async function closeStream(){const o=current.options;let suffix='</sheetData>';if(o.audit&&o.template!=='审核汇总'||!o.audit&&current.name!=='Claim Summary')suffix+='<autoFilter ref="A'+(o.audit?4:1)+':'+XLSX.utils.encode_col(Math.max(0,(o.headers||current.headers).length-1))+Math.max(o.audit?4:1,row)+'"/>';let merges=[];if(o.template==='审核汇总')merges=Array.from({length:12},(_,i)=>'B'+(13+i)+':L'+(13+i));if(o.notesStart)for(let r=o.notesStart;r<=row;r++)merges.push('A'+r+':D'+r);if(merges.length)suffix+='<mergeCells count="'+merges.length+'">'+merges.map(r=>'<mergeCell ref="'+r+'"/>').join('')+'</mergeCells>';await writeXML(suffix+'</worksheet>');await stream.writer.close();await stream.reading;const data=new Uint8Array(stream.parts.reduce((n,x)=>n+x.length,0));let at=0;for(const part of stream.parts){data.set(part,at);at+=part.length;}entries.push({name:'xl/worksheets/sheet'+(sheetNames.length+1)+'.xml',method:8,crc:(stream.crc^0xffffffff)>>>0,size:stream.size,data});sheetNames.push(current.name);stream=null;}
-
-self.onmessage=async e=>{try{const m=e.data;if(m.op==='book'){theme=m.theme;forceAudit=!!m.audit;entries=[];seed=null;sheetNames=[];meta=[];self.postMessage({ok:true});}else if(m.op==='sheet'){wb=XLSX.utils.book_new();current={name:m.name,headers:m.headers,options:m.options||{}};if(typeof CompressionStream!=='undefined'&&await openStream()){self.postMessage({ok:true});return;}sh=XLSX.utils.aoa_to_sheet([m.headers]);sh['!cols']=m.headers.map(h=>({wch:/Reason|原因|依据|Scope/.test(h)?90:/Description|费用名称/.test(h)?54:/Number|运单/.test(h)?27:22}));row=1;self.postMessage({ok:true});}else if(m.op==='rows'){if(stream){await streamRows(m.rows);self.postMessage({ok:true});return;}XLSX.utils.sheet_add_aoa(sh,m.rows,{origin:{r:row,c:0}});row+=m.rows.length;self.postMessage({ok:true});}else if(m.op==='endSheet'){if(stream){await closeStream();self.postMessage({ok:true});return;}if(current.options.audit){const t=current.options.layout,headers=current.options.headers;sh['!cols']=headers.map(h=>({wch:t.cols[h]?.width||19}));sh['!rows']=Array.from({length:row},(_,i)=>({hpt:i===3?t.headerHeight:i<4?22:t.rowHeight}));if(current.options.template==='审核汇总'){sh['!merges']=Array.from({length:12},(_,i)=>XLSX.utils.decode_range('B'+(13+i)+':L'+(13+i)));for(let i=12;i<24;i++)sh['!rows'][i]={hpt:Math.max(28,Math.ceil(String(sh['B'+(i+1)]?.v||'').length/100)*16)};sh['!rows'][26]={hpt:38};}else{sh['!autofilter']={ref:XLSX.utils.encode_range({s:{r:3,c:0},e:{r:row-1,c:headers.length-1}})};}if(current.options.notesStart){const first=current.options.notesStart;sh['!merges']=Array.from({length:Math.max(0,row-first+1)},(_,i)=>XLSX.utils.decode_range('A'+(first+i)+':D'+(first+i)));for(let i=first-1;i<row;i++)sh['!rows'][i]={hpt:Math.max(28,Math.ceil(String(sh['A'+(i+1)]?.v||'').length/75)*16)};}if(t.freeze){const c=XLSX.utils.decode_cell(t.freeze);current.freeze={xSplit:c.c,ySplit:c.r,topLeftCell:t.freeze};}}else if(current.name!=='Claim Summary'){sh['!autofilter']={ref:sh['!ref']};sh['!rows']=Array.from({length:row},(_,i)=>({hpt:i===0?44:current.headers.some(h=>/Reason|原因|依据/.test(h))?90:24}));}XLSX.utils.book_append_sheet(wb,sh,current.name);meta.push(current);sh=null;keepSheet();self.postMessage({ok:true});}else if(m.op==='finish'){const bytes=finishBook();self.postMessage({ok:true,bytes},[bytes]);}}catch(err){self.postMessage({error:err.message||String(err)});}};
-}
-async function plan(sheets,onProgress=()=>{}){const parts=[];let total=0;for(const [name,input,options={}]of sheets){if(!input?.length)continue;let data=input,headers=[];if(options.aoa){const width=input.reduce((n,r)=>Math.max(n,r.length),1);headers=Array.from({length:width},(_,i)=>input[0]?.[i]??'');data=input.slice(1);}else{const seen=new Set();for(let i=0;i<data.length;i++){for(const k of Object.keys(data[i]||{}))if(!seen.has(k)){seen.add(k);headers.push(k);}if(i%2000===1999){onProgress('整理导出字段：'+name+' '+(i+1)+' / '+data.length);await new Promise(r=>setTimeout(r,0));}}}if(headers.length>16384||data.length>1048575)throw Error('工作表超出Excel单表行列上限：'+name+'；未拆卷，请缩小审核范围');parts.push({name,headers,data,start:0,end:data.length,aoa:!!options.aoa,options});total+=data.length;}if(!parts.length)throw Error('没有可导出的报告');return{volumes:[parts],total};}
-function createSession(){let worker=null,url=null,rejectPending=null,cancelled=false;const cancel=()=>{cancelled=true;if(worker)worker.terminate();if(url)URL.revokeObjectURL(url);if(rejectPending)rejectPending(Error('导出已取消；审核结果仍保留'));};async function run(sheets,onProgress,onFile){if(!root.Worker)throw Error('当前浏览器不支持后台导出，请使用Chrome或Edge');const planned=await plan(sheets,s=>{if(cancelled)throw Error('导出已取消');onProgress(s);});if(cancelled)throw Error('导出已取消');let done=0;for(let vi=0;vi<planned.volumes.length;vi++){if(cancelled)throw Error('导出已取消');url=URL.createObjectURL(new Blob([root.ShipGridXLSXWorkerSource+'\n('+workerMain.toString()+')();'],{type:'text/javascript'}));worker=new Worker(url);const send=m=>new Promise((resolve,reject)=>{if(cancelled){reject(Error('导出已取消'));return;}rejectPending=reject;worker.onmessage=e=>{rejectPending=null;e.data.error?reject(Error(e.data.error)):resolve(e.data);};worker.onerror=e=>{rejectPending=null;reject(Error('后台Excel导出失败：'+(e.message||'内存不足，请关闭其他页面后重试')));};worker.postMessage(m);});try{await send({op:'book',audit:planned.volumes[vi].some(p=>p.options.audit),theme:{...root.UPSDisputeStyle,audit:root.UPSAuditReportTemplate}});for(const part of planned.volumes[vi]){onProgress('正在后台生成'+part.name);await send({op:'sheet',name:part.name,headers:part.headers,options:{...part.options,layout:part.options.audit?root.UPSAuditReportTemplate.sheets[part.options.template]:null}});const batch=Math.max(1,Math.floor(BATCH_CELLS/Math.max(1,part.headers.length)));for(let i=part.start;i<part.end;i+=batch){if(cancelled)throw Error('导出已取消');const end=Math.min(part.end,i+batch);await send({op:'rows',rows:part.data.slice(i,end).map(r=>part.aoa?part.headers.map((_,j)=>r[j]??null):part.headers.map(h=>{const v=r[h];return v===null||v===undefined?null:typeof v==='object'&&!(v instanceof Date)?String(v):v;}))});done+=end-i;onProgress('已生成 '+done+' / '+planned.total+' 行');}await send({op:'endSheet'});}onProgress('正在压缩Excel…');const out=await send({op:'finish',theme:{...root.UPSDisputeStyle,audit:root.UPSAuditReportTemplate}});await onFile(out.bytes,vi+1,planned.volumes.length);}finally{worker.terminate();worker=null;URL.revokeObjectURL(url);url=null;}}return planned.volumes.length;}
-return{run,cancel};}
-root.ShipGridAuditExport={plan,createSession,workerMain,MAX_CELLS};
+		self.onmessage = async (e) => {
+			try {
+				const m = e.data;
+				if (m.op === "book") {
+					theme = m.theme;
+					forceAudit = !!m.audit;
+					entries = [];
+					seed = null;
+					sheetNames = [];
+					meta = [];
+					self.postMessage({ ok: true });
+				} else if (m.op === "sheet") {
+					wb = XLSX.utils.book_new();
+					current = {
+						name: m.name,
+						headers: m.headers,
+						options: m.options || {},
+					};
+					if (
+						typeof CompressionStream !== "undefined" &&
+						(await openStream())
+					) {
+						self.postMessage({ ok: true });
+						return;
+					}
+					sh = XLSX.utils.aoa_to_sheet([m.headers]);
+					sh["!cols"] = m.headers.map((h) => ({
+						wch: /Reason|原因|依据|Scope/.test(h)
+							? 90
+							: /Description|费用名称/.test(h)
+								? 54
+								: /Number|运单/.test(h)
+									? 27
+									: 22,
+					}));
+					row = 1;
+					self.postMessage({ ok: true });
+				} else if (m.op === "rows") {
+					if (stream) {
+						await streamRows(m.rows);
+						self.postMessage({ ok: true });
+						return;
+					}
+					XLSX.utils.sheet_add_aoa(sh, m.rows, { origin: { r: row, c: 0 } });
+					row += m.rows.length;
+					self.postMessage({ ok: true });
+				} else if (m.op === "endSheet") {
+					if (stream) {
+						await closeStream();
+						self.postMessage({ ok: true });
+						return;
+					}
+					if (current.options.audit) {
+						const t = current.options.layout,
+							headers = current.options.headers;
+						sh["!cols"] = headers.map((h) => ({ wch: t.cols[h]?.width || 19 }));
+						sh["!rows"] = Array.from({ length: row }, (_, i) => ({
+							hpt: i === 3 ? t.headerHeight : i < 4 ? 22 : t.rowHeight,
+						}));
+						if (current.options.template === "审核汇总") {
+							sh["!merges"] = Array.from({ length: 12 }, (_, i) =>
+								XLSX.utils.decode_range("B" + (13 + i) + ":L" + (13 + i)),
+							);
+							for (let i = 12; i < 24; i++)
+								sh["!rows"][i] = {
+									hpt: Math.max(
+										28,
+										Math.ceil(String(sh["B" + (i + 1)]?.v || "").length / 100) *
+											16,
+									),
+								};
+							sh["!rows"][26] = { hpt: 38 };
+						} else {
+							sh["!autofilter"] = {
+								ref: XLSX.utils.encode_range({
+									s: { r: 3, c: 0 },
+									e: { r: row - 1, c: headers.length - 1 },
+								}),
+							};
+						}
+						if (current.options.notesStart) {
+							const first = current.options.notesStart;
+							sh["!merges"] = Array.from(
+								{ length: Math.max(0, row - first + 1) },
+								(_, i) =>
+									XLSX.utils.decode_range(
+										"A" + (first + i) + ":D" + (first + i),
+									),
+							);
+							for (let i = first - 1; i < row; i++)
+								sh["!rows"][i] = {
+									hpt: Math.max(
+										28,
+										Math.ceil(String(sh["A" + (i + 1)]?.v || "").length / 75) *
+											16,
+									),
+								};
+						}
+						if (t.freeze) {
+							const c = XLSX.utils.decode_cell(t.freeze);
+							current.freeze = {
+								xSplit: c.c,
+								ySplit: c.r,
+								topLeftCell: t.freeze,
+							};
+						}
+					} else if (current.name !== "Claim Summary") {
+						sh["!autofilter"] = { ref: sh["!ref"] };
+						sh["!rows"] = Array.from({ length: row }, (_, i) => ({
+							hpt:
+								i === 0
+									? 44
+									: current.headers.some((h) => /Reason|原因|依据/.test(h))
+										? 90
+										: 24,
+						}));
+					}
+					XLSX.utils.book_append_sheet(wb, sh, current.name);
+					meta.push(current);
+					sh = null;
+					keepSheet();
+					self.postMessage({ ok: true });
+				} else if (m.op === "finish") {
+					const bytes = finishBook();
+					self.postMessage({ ok: true, bytes }, [bytes]);
+				}
+			} catch (err) {
+				self.postMessage({ error: err.message || String(err) });
+			}
+		};
+	}
+	async function plan(sheets, onProgress = () => {}) {
+		const parts = [];
+		let total = 0;
+		for (const [name, input, options = {}] of sheets) {
+			if (!input?.length) continue;
+			let data = input,
+				headers = [];
+			if (options.aoa) {
+				const width = input.reduce((n, r) => Math.max(n, r.length), 1);
+				headers = Array.from({ length: width }, (_, i) => input[0]?.[i] ?? "");
+				data = input.slice(1);
+			} else {
+				const seen = new Set();
+				for (let i = 0; i < data.length; i++) {
+					for (const k of Object.keys(data[i] || {}))
+						if (!seen.has(k)) {
+							seen.add(k);
+							headers.push(k);
+						}
+					if (i % 2000 === 1999) {
+						onProgress(
+							"整理导出字段：" + name + " " + (i + 1) + " / " + data.length,
+						);
+						await new Promise((r) => setTimeout(r, 0));
+					}
+				}
+			}
+			if (headers.length > 16384 || data.length > 1048575)
+				throw Error(
+					"工作表超出Excel单表行列上限：" + name + "；未拆卷，请缩小审核范围",
+				);
+			parts.push({
+				name,
+				headers,
+				data,
+				start: 0,
+				end: data.length,
+				aoa: !!options.aoa,
+				options,
+			});
+			total += data.length;
+		}
+		if (!parts.length) throw Error("没有可导出的报告");
+		return { volumes: [parts], total };
+	}
+	function createSession() {
+		let worker = null,
+			url = null,
+			rejectPending = null,
+			cancelled = false;
+		const cancel = () => {
+			cancelled = true;
+			if (worker) worker.terminate();
+			if (url) URL.revokeObjectURL(url);
+			if (rejectPending) rejectPending(Error("导出已取消；审核结果仍保留"));
+		};
+		async function run(sheets, onProgress, onFile) {
+			if (!root.Worker)
+				throw Error("当前浏览器不支持后台导出，请使用Chrome或Edge");
+			const planned = await plan(sheets, (s) => {
+				if (cancelled) throw Error("导出已取消");
+				onProgress(s);
+			});
+			if (cancelled) throw Error("导出已取消");
+			let done = 0;
+			for (let vi = 0; vi < planned.volumes.length; vi++) {
+				if (cancelled) throw Error("导出已取消");
+				url = URL.createObjectURL(
+					new Blob(
+						[
+							root.ShipGridXLSXWorkerSource +
+								"\n(" +
+								workerMain.toString() +
+								")();",
+						],
+						{ type: "text/javascript" },
+					),
+				);
+				worker = new Worker(url);
+				const send = (m) =>
+					new Promise((resolve, reject) => {
+						if (cancelled) {
+							reject(Error("导出已取消"));
+							return;
+						}
+						rejectPending = reject;
+						worker.onmessage = (e) => {
+							rejectPending = null;
+							e.data.error ? reject(Error(e.data.error)) : resolve(e.data);
+						};
+						worker.onerror = (e) => {
+							rejectPending = null;
+							reject(
+								Error(
+									"后台Excel导出失败：" +
+										(e.message || "内存不足，请关闭其他页面后重试"),
+								),
+							);
+						};
+						worker.postMessage(m);
+					});
+				try {
+					await send({
+						op: "book",
+						audit: planned.volumes[vi].some((p) => p.options.audit),
+						theme: {
+							...root.UPSDisputeStyle,
+							audit: root.UPSAuditReportTemplate,
+						},
+					});
+					for (const part of planned.volumes[vi]) {
+						onProgress("正在后台生成" + part.name);
+						await send({
+							op: "sheet",
+							name: part.name,
+							headers: part.headers,
+							options: {
+								...part.options,
+								layout: part.options.audit
+									? root.UPSAuditReportTemplate.sheets[part.options.template]
+									: null,
+							},
+						});
+						const batch = Math.max(
+							1,
+							Math.floor(BATCH_CELLS / Math.max(1, part.headers.length)),
+						);
+						for (let i = part.start; i < part.end; i += batch) {
+							if (cancelled) throw Error("导出已取消");
+							const end = Math.min(part.end, i + batch);
+							await send({
+								op: "rows",
+								rows: part.data.slice(i, end).map((r) =>
+									part.aoa
+										? part.headers.map((_, j) => r[j] ?? null)
+										: part.headers.map((h) => {
+												const v = r[h];
+												return v === null || v === undefined
+													? null
+													: typeof v === "object" && !(v instanceof Date)
+														? String(v)
+														: v;
+											}),
+								),
+							});
+							done += end - i;
+							onProgress("已生成 " + done + " / " + planned.total + " 行");
+						}
+						await send({ op: "endSheet" });
+					}
+					onProgress("正在压缩Excel…");
+					const out = await send({
+						op: "finish",
+						theme: {
+							...root.UPSDisputeStyle,
+							audit: root.UPSAuditReportTemplate,
+						},
+					});
+					await onFile(out.bytes, vi + 1, planned.volumes.length);
+				} finally {
+					worker.terminate();
+					worker = null;
+					URL.revokeObjectURL(url);
+					url = null;
+				}
+			}
+			return planned.volumes.length;
+		}
+		return { run, cancel };
+	}
+	root.ShipGridAuditExport = { plan, createSession, workerMain, MAX_CELLS };
 })(globalThis);

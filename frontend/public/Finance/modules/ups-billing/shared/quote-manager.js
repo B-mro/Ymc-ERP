@@ -1,3 +1,27 @@
+/*
+ * ShipGrid 报价管理器（客户报价/客户匹配规则/固定报价 三层管理）
+ * 文件: shared/quote-manager.js
+ * ----------------------------------------------------------------------------
+ * 职责：
+ *   1. ShipGridShared — 共享状态层：报价文件列表、文件上传、远程/本地存储切换、
+ *      固定报价（服务器预装 excel_files/）加载、文件列表 API、远程 CRUD
+ *   2. ShipGridQuoteManager — 主管理器：索引DB 本地持久化、客户→报价匹配规则、
+ *      validateQuote() 委托 QuoteValidators、use() 供账单引擎取价、
+ *      init/refresh/replaceSets/reload/downloadQuoteTemplate/downloadStandardDefault
+ *   3. match(rules, carrier, g) — 按 GTS 客户信息匹配报价规则（按 carrier + customerId/Name）
+ *   4. validateRule(rule, others) — 规则唯一性 + Fedex 策略合法性校验
+ *   5. UI 挂载：openQuoteManager()、uploadFixedQuoteFiles()
+ *
+ * 存储层级：远程 (serverBase/api/) → 文件上传 (serverBase/excel_files/) → 本地 IndexedDB
+ * 固定报价：build.py 注入的 excel_files/*.xlsx，通过 remoteRead() 二进制加载
+ *
+ * 暴露对象：
+ *   root.ShipGridShared       = { state, refresh, loadFileList, read, write, ... }
+ *   root.ShipGridQuoteManager = { state, init, refresh, write, readQuote, validateQuote, ... }
+ *   root.openQuoteManager()   — 打开报价管理 UI 面板
+ *   root.uploadFixedQuoteFiles() — 批量上传固定报价
+ * ----------------------------------------------------------------------------
+ */
 /*SG-AUDIT:finance-13.js*/ (function (root) {
 	"use strict";
 	// const names = [
@@ -166,10 +190,7 @@
 			(location.protocol === "http:" || location.protocol === "https:"
 				? location.origin
 				: "http://121.43.236.24"),
-		// token: localStorage.getItem("rbac_token") || "",
-		token:
-			"eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbiIsInVzZXJJZCI6MSwiaWF0IjoxNzk0MzYwMzY2LCJleHAiOjE3OTQzNjc1NjZ9.oqlr4-58N190T1I7EpMtL1fA-4dCqsJ7Wa9znpIT9OszoGN4Ixp5auu__6W8S4l9rjeNYwKqpkNcW9bCrnWTkQ",
-
+		token: localStorage.getItem("rbac_token") || "",
 		revision: null,
 		connected: false,
 		busy: false,

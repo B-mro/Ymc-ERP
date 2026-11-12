@@ -1,3 +1,21 @@
+// ============================================================================
+// data/ontrac-fuel.js —— 内置官方燃油费率历史
+// ----------------------------------------------------------------------------
+// 直接把 Ontrac 官网公布的 "National U.S. Average" 燃油费率内嵌进来。
+// 格式：
+//   source    —— 官网 URL
+//   series    —— "National U.S. Average"
+//   fetchedAt —— 抓取时间 ISO
+//   rates[]   —— 按周分段的费率数组
+//       { start, end, rate }
+//       rate 是小数，比如 0.2225 = 22.25%
+//
+// 引擎按 Ship Date 去 rates 里做区间匹配，找到那一周对应的费率。
+// 如果匹配不到（日期超出覆盖范围），引擎会走「原账单倒推」分支并标记警示。
+//
+// 用户可以在页面上点「更新官网燃油费率」按钮，通过 API 接口重新拉取最新费率，
+// 拉取成功后直接替换 globalThis.ShipGridFuelRates 并触发重算。
+// ============================================================================
 /*SG-AUDIT:finance-04.js*/ globalThis.ShipGridFuelRates = {
 	source: "https://www.ontrac.com/surchargesandrates/",
 	series: "National U.S. Average",

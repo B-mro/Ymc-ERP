@@ -1,3 +1,33 @@
+/**
+ * 文件：peak-defaults.js
+ * 路径：fedex-billing/data/
+ * 职责：
+ *   1) ShipGridPeakDefaults  — FedEx / OnTrac / UPS 三家旺季附加费"默认日期区间"，用于标准价表模板预填；
+ *      2) ShipGridQuoteDefaults  — 三家承运商"空"的标准价表模型（所有值为 null），供 standard-quotes.js 在
+ *      下载模板时深拷贝一份再填入已有报价。
+ *
+ * 旺季默认（ShipGridPeakDefaults）：
+ *   每家有 source（官网 URL）、demand（旺季 AHS/LPS/Unauthorized 默认区间数组）、residential（旺季住宅费默认区间数组）。
+ *   这些日期只是"模板预填"，客户实际收费金额在报价文件里由报价行决定，不是公布价。
+ *   三家 2026/2027 旺季区间已按官网公告预填，后续每年需要人工更新。
+ *
+ * 空模板（ShipGridQuoteDefaults）：
+ *   - ontrac.base       : 1–150 LB × Zone 2–8，共 1050 个 "重量|分区" 键，值全为 null
+ *   - fedex.ngbase      : 同上，Ground/Home Delivery 主服务
+ *   - fedex.spbase      : 1–71 LB × Zone 2–8（SmartPost 71 LB 上限）
+ *   - ups.comm.base + ups.resi.base : UPS Commercial / Residential 分开两张 1–150 LB 表
+ *   附加字段（factor / dim / resi / ahsD / ahsW / ahsP / os / das / edas / remote / indirect / direct / adult / address / declaredMin / declaredPer100 / unauthorized / sp.demand / sp.delivery 等）
+ *   全部按"零值"预置，旺季 demand / resiDemand 的 start / end 按上面 PeakDefaults 的对应区间预填，方便用户只改金额不改日期。
+ *
+ * 对外暴露：globalThis.ShipGridPeakDefaults, globalThis.ShipGridQuoteDefaults
+ * 调用方：
+ *   - standard-quotes.js 的 modelFor(carrier)        → clone(ShipGridQuoteDefaults[carrier])
+ *   - standard-quotes.js 的 download(carrier, wb)     → 读已有报价填充模板
+ *   - quote-validators.js 的 validate(model, carrier) → 检查 base 完整性时会拿 baseKeys[carrier]
+ *
+ * 注意：本文件被多个模块共享（fedex / ontrac / ups-billing / ups-audit 都会加载），
+ *       它在每个模块里各有一份副本，修改时必须同步更新所有四个文件夹下的同名文件。
+ */
 /*SG-AUDIT:finance-07.js*/ globalThis.ShipGridPeakDefaults = {
 	ontrac: {
 		source: "https://www.ontrac.com/surchargesandrates/",

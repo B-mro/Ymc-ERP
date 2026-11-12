@@ -1,3 +1,83 @@
+/**
+ * 文件：fedex-billing.js
+ * 路径：fedex-billing/engine/
+ * 职责：FedEx 账单计费核心引擎。读取 FedEx 原始账单 + GTS 系统数据 + 客户报价 + 可选覆盖表，
+ *       按 ShipGrid 统一计费规则重算每一单的客户应收金额（运输费、各单项附加费、燃油），
+ *       最终输出带"逐单差异"的 XLSX。
+ *
+ * 对外暴露：root.FedExBilling = { calculate, quote, workbook, bytes, feeGroup }
+ *
+ * 输入参数（calculate）：
+ *   rawWb     : FedEx 官方原始账单 workbook（含 Ground/Home Delivery 明细 + Net Charge）
+ *   gtsWb     : GTS 系统导出 workbook（含主/子/转单号、KG/CM 实重与尺寸、系统订单号、客户单号）
+ *   qWb       : 客户报价 workbook；也可以是"按客户动态解析"的 function（files/shared 模式时）
+ *   settings  : { originalFuelFactor: 0.7, childInvoice, overrideWb, pricingMode, ... }
+ *     - originalFuelFactor  FedEx 原始账户对官方燃油费率的折扣比例（Ground 客户通常 0.7）
+ *     - childInvoice        子单账单工作簿（可选）
+ *     - overrideWb          逐单覆盖表工作簿（可选，fedex-overrides.js 解析）
+ *     - pricingMode         "auto" | "fixed" | "upload"，决定 qWb 是统一报价还是逐单匹配
+ *
+ * 逐单计算主流程（calculate 内部大循环）：
+ *   1) 从原始账单扫表头，定位 "Express or Ground Tracking ID" 行，之后行都是逐单数据
+ *   2) 从 GTS 工作表取 "订单ID"、"主单号/子单号/转单号"，建三张 Map（按订单ID、按运单号、按客户单号）
+ *   3) 遍历原始账单每一行 → child-invoice 匹配分区代码和住宅/偏远收费证据
+ *      → fedex-overrides 匹配覆盖（按"客户ID + 运单号"）
+ *      → fedex-customer-policy 取客户自定义规则（gtsZoneWeight / gtsZoneDim / precision / zoneStrategy / weightSource）
+ *      → choose() 对原始尺寸 vs GTS 尺寸做等级判定 + 取高
+ *      → ShipGridWeightPolicy 算计费重（取 max(原始计费重, GTS实重, GTS进位尺寸重, 服务最低重)）
+ *      → quote.ngbase[zone|billed] 查基础运费（SmartPost 时换 spbase）
+ *      → 各项附加费按费用表头 + 报价字段映射（住宅费、AHS-D/W/P、OS、DAS、EDAS、Remote、Address、Adult/Indirect/Direct Signature、Declared Value）
+ *      → 旺季（demand / resiDemand）按 Tendered Date 匹配区间，叠加 AHS/OS/Residential 旺季金额
+ *      → 燃油按 FedExFuel.rates 匹配同周公布费率 × t.factor（Ground/SmartPost 不同）
+ *      → Net = base + surcharge + fuel；原始 Net Charge 作为差异对比
+ *
+ * grade(d, w, economy) —— 尺寸等级判定（FedEx Ground/Ground Economy 两套阈值）：
+ *   Ground/Home Delivery 阈值：L≤48、W≤30、girth=2L+2W+2H≤105、体积≤10368、w≤50 为 0级，逐级抬高至 L>108 或 girth>165 触发 3级
+ *   Ground Economy 阈值更紧：L>60 或 girth>130 直接 3级
+ *
+ * choose(rd, gd, ra, ga, eco, rb, gb, eventGrade, rawPrice, gtsPrice) —— 原始 vs GTS 尺寸/重量取高：
+ *   规则：等级高者胜；同等级时按客户基础运费取高；基础费相同时选计费重更大的一套；整套尺寸同源，避免混合取数。
+ *   返回 { selectedPrice, dims, source, reason, rawGrade, gtsGrade, rawVolume, gtsVolume }
+ *
+ * quote(wb) —— 解析客户报价 Excel：
+ *   若 ShipGridStandardQuotes.is(wb) 为真，委托 standard-quotes.parse(wb, "fedex")
+ *   否则走传统格式：FEDEX-NG（2026 或 2026B 工作表名） + "SmartPost"
+ *   输出 model：{ factor, dim, ngbase, spbase, resi, ahsD/ahsW/ahsP, os, dasR/C, edasR/C, remoteR/C, indirect, direct, adult, address, declaredMin/Per100, demand[], resiDemand[], sp: {...} }
+ *
+ * workbook(r, customer) —— 把 calculate 结果写成 XLSX（逐单明细 + 客户汇总）：
+ *   r = calculate 返回值；customer 过滤指定客户
+ *   明细列按原始账单顺序，但费用字段按 feeColumns 固定位置，未收取留空
+ *   汇总表包含：逐客户汇总（基础费、燃油、各附加费、总净） + 规则说明 + 官方来源
+ *
+ * bytes(r, customer) —— workbook 的基础上，把"红色警示"单元格列表（red: [col, ...]）用 CFB 方式手工着色：
+ *   先写默认 styles.xml，插入一个红底白字字体和一个 cellXfs 样式，再用正则把 sheet1.xml 里对应 <c> 打上 s=样式ID
+ *   返回 Uint8Array，供浏览器下载
+ *
+ * 常量 feeColumns：
+ *   Residential Delivery / DAS Residential / DAS Commercial / DAS Extended Residential / DAS Extended Commercial / DAS Remote Residential / DAS Remote Comm / Add'l Handling-Dimension / Add'l Handling-Weight / Add'l Handling-Packaging / Oversize Charge / Address Correction / Direct Signature Req. / Adult Signature Req. / Indirect Signature Req. / Declared Value Charge / Demand-Add'l Handling / Demand-Oversize / Demand-Residential / Delivery and Returns / USPS Non-Mach Surcharge / Delivery Area Surcharge / Delivery Area Surcharge Extended / Package Relabel / Demand Surcharge / Fuel Surcharge
+ *   —— 这些是 FedEx 账单里固定列示的费用名，feeGroup 把它们聚合成"基础运费 / 附加费 / 旺季附加费 / SmartPost 专属 / 燃油"五大类。
+ *
+ * 额外辅助函数（文件内部，不对外）：
+ *   ceil(v)         → Math.ceil(v - 1e-10)，避开 1.0 的浮点陷阱
+ *   round(v)        → 两位小数四舍五入
+ *   kg = 2.20462... → KG → LB 换算系数
+ *   gtsTrunc(v)     → GTS 实重截到第三位小数
+ *   gtsCeil(v)      → 截三位后进一
+ *   num(v) / positive(v, k) / zone(v) / empty(v) / date(v) / matrix(wb, name) / period(s)
+ *   —— 基础工具：数值解析、正实数、分区代码、空值判定、日期解析、sheet_to_json([header:1])、旺季区间字符串
+ *
+ * 依赖：
+ *   - XLSX                                vendor/xlsx.full.min.js
+ *   - ShipGridChildInvoice                同目录 shared/child-invoice.js
+ *   - ShipGridFedExOverrides              同目录 shared/fedex-overrides.js
+ *   - ShipGridFedExCustomerPolicy         同目录 shared/fedex-customer-policy.js
+ *   - ShipGridWeightPolicy                同目录 shared/billing-weight-policy.js
+ *   - ShipGridQuoteValidators / StandardQuotes 同目录 shared/
+ *   - FedExFuel                           data/fedex-fuel.js
+ *
+ * 注意：本文件是四个 billing 引擎里最复杂的一个（FedEx 有 SmartPost 分支、住宅/偏远/DAS 分裂、三个 AHS 类型），
+ *       OnTrac / UPS 引擎沿用同样的 quote / grade / choose / calculate / workbook / bytes 六件套但字段更少。
+ */
 /*SG-AUDIT:finance-16.js*/ (function (root) {
 	"use strict";
 	const X = () => root.XLSX,
@@ -283,7 +363,7 @@
 		"GTS长INCH（进一）",
 		"GTS宽INCH（进一）",
 		"GTS高INCH（进一）",
-		"GTS原表分区",
+		"子单账单原表分区",
 		"原始实际重量LB",
 		"原始计费重量LB",
 		"原始长INCH",
@@ -871,7 +951,7 @@
 					warnings.push("燃油日期无效，采用倒推；出账前复核");
 				}
 				if (reference < 0 || reference > 1) throw Error("燃油参考率异常");
-			
+
 				const pricePolicy = root.ShipGridWeightPolicy.price(
 					eco ? t.spbase : t.ngbase,
 					z,

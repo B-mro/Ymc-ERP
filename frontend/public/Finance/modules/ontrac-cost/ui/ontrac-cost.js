@@ -1,3 +1,46 @@
+// ============================================================================
+// ui/ontrac-cost.js —— Vue 3 组件层（setup 风格）
+// ----------------------------------------------------------------------------
+// 整个页面就一个 Vue 组件，setup() 里声明所有状态和方法。
+// 页面的所有交互——上传文件、调引擎、展示结果、下载——都在这个文件里。
+//
+// 状态声明（setup 开头）：
+//   files       reactive 对象，存三个文件：
+//                 invoice —— 用户上传的原始账单+GTS 工作簿
+//                 A / B   —— 内置价表（ShipGridDefaultRates.A / .B）
+//   slots       上传槽位配置数组（目前只有 invoice 一个）
+//   settings    reactive，从 OnTracEngine.defaultSettings 深拷贝来的参数
+//   settingsOpen ref，控制参数面板展开/收起
+//   busy        ref，全局忙碌状态（上传/计算/下载中为 true，按钮会被禁用）
+//   error       ref，显示红色错误条
+//   result      shallowRef，引擎返回的完整计算结果
+//   tab         ref，"details" 或 "errors"，控制显示哪个表格
+//   search      ref，搜索框值
+//   filter      ref，方案筛选 "all" / "A" / "B" / "warning"
+//   page        ref，分页当前页
+//
+// 方法：
+//   upload(file, key)      —— 读取用户选的 Excel，校验后存进 files[key]
+//                              校验：扩展名 .xlsx/.xls、大小 ≤50MB、
+//                              invoice 必须同时含「原始」和「GTS」两个 sheet
+//   refreshFuel()          —— 调 /api/ontrac/surcharge/history 拉最新燃油费率
+//   calculate()            —— 核心触发：
+//                              1) 校验 settings 里旺季费用和日期格式/范围
+//                              2) OnTracEngine.calculate(invoice.wb, A.wb, B.wb, settings)
+//                              3) 结果赋给 result，重置 tab/search/filter/page
+//   download()             —— OnTracEngine.workbook(result) 生成 XLSX 工作簿，
+//                              XLSX.writeFile 直接触发浏览器下载
+//
+// computed：
+//   ready        —— 三个文件都有值才返回 true（A/B 默认就有，等 invoice）
+//   filtered     —— 根据 tab/filter/search 过滤 result.rows 或 result.errors
+//   pages        —— filtered 除以 20 向上取整
+//   visible      —— filtered 按 page 切片（每页 20 条）
+//
+// watch：
+//   settings  deep=true —— 参数一改就 invalidate（清空 result 和 error）
+//   [search, filter, tab] —— 切换 tab/筛选/搜索时 page 重置到 1
+// ============================================================================
 /*SG-AUDIT:finance-06.js*/ const { createApp, reactive, ref, computed, watch } =
 	Vue;
 ShipGridModule.createApp({

@@ -1,3 +1,50 @@
+/**
+ * 文件：quote-validators.js
+ * 路径：fedex-billing/shared/
+ * 职责：解析 OnTrac / FedEx / UPS 三家承运商客户报价 Excel，提取计费模型对象（model）。
+ *       支持两种报价格式：
+ *         1) 传统格式（各家自有工作表，例如 FedEx 要求 FEDEX-NG + SmartPost 两张表）
+ *         2) 标准价表格式（由 standard-quotes.js 生成，特征：wb.SheetNames.includes("SG标准价表")）
+ *          检测到是标准价表时，直接委托给 ShipGridStandardQuotes.parse(wb, carrier)。
+ *
+ * 对外暴露：globalThis.ShipGridQuoteValidators = { ontrac(wb), fedex(wb), ups(wb) }
+ *   每个函数接受 XLSX.read() 返回的 workbook（wb），抛 Error 说明缺失的字段，成功时返回 model：
+ *
+ *   ontrac(wb) → {
+ *     base          : "重量|分区" → 基础费 USD（1–150 × 2–8 共 1050 项，缺失抛错）
+ *     factor        : 燃油支付比例（0–1 之间的小数）
+ *     dim           : 体积重除数 DIM，固定 275
+ *     resi / sig / das / edas / address  : 住宅费、签名、DAS、EDAS、地址更正 单项数值
+ *     ahs : [Zone2, Zones3-4, Zones5-6, Zones7-8] 分区额外处理费
+ *     os  : 分区超限 / 大件 费
+ *     periods 数组：旺季 AHS / LPS / max / unauthorized 的日期区间和金额
+ *   }
+ *
+ *   fedex(wb) → {
+ *     factor        : 燃油支付比例
+ *     dim           : DIM，从报价中解析（不一定 275）
+ *     ngbase / spbase : Ground/Home Delivery (1–150) 与 SmartPost (1–71) 两套基础运费
+ *     resi / dasR / dasC / edasR / edasC / remoteR / remoteC / indirect / direct / adult / address
+ *     ahsD / ahsW / ahsP / os           : 分区 × 4 的 AHS 三类 + OS
+ *     declaredMin / declaredPer100      : 保险最低 / 每 100 USD 比率
+ *     demand / resiDemand 数组          : 旺季 AHS/OS/Unauthorized 与旺季住宅
+ *     sp: { fuel, dim, delivery, nonMach, das, edas, relabel, demand[] }  : SmartPost 专属
+ *   }
+ *
+ *   ups(wb) → {
+ *     comm: { base, factor, dim, resi, ahsD, ahsW, ahsP, os, unauthorized, dasR/C, edasR/C, remoteR/C, indirect, direct, adult, address, declaredMin, declaredPer100, demand[], resiDemand[] }
+ *     resi: { 同上结构 }
+ *   }
+ *   UPS 报价必须同时有 Commercial + Residential 两张价表，Ground 版返回两套独立 model。
+ *
+ * 调用方：
+ *   - quote-manager.js 的 validateQuote(wb, carrier)
+ *   - engine 模块（fedex-billing.js / ontrac-billing.js / ups-billing.js）解析固定报价
+ *
+ * 与 standard-quotes.js 的关系：
+ *   本文件遇到 SG标准价表 工作表时把工作簿整体交给 standard-quotes.parse 做字段级校验，
+ *   传统报价则自己 parse。两者最终返回同一结构的 model，供上层 billing-weight-policy.js 等统一消费。
+ */
 /* Quote template validators only; no billing calculation or UI mounts. */
 (function (root) {
 	"use strict";

@@ -1,24 +1,87 @@
+// ============================================================================
+// engine/ontrac-cost.js —— OnTrac A/B 成本测算 核心引擎
+// ----------------------------------------------------------------------------
+// 对外暴露 globalThis.OnTracEngine = { calculate, workbook, defaultSettings }
+//
+// 入口函数 calculate(rawWb, aWb, bWb, settings) 返回：
+//   { rows, errors, unmatched, summary, settings }
+//
+// 内部执行流程（按顺序）：
+//   ┌─────────────────────────────────────────────────────────────────────┐
+//   │ 1. 解析三个 workbook                                                 │
+//   │    rawWb → rows("原始"), GTS(gtsWb)                                  │
+//   │    aWb / bWb → tariff() 解析成价表结构 tA / tB                      │
+//   └─────────────────────────────────────────────────────────────────────┘
+//                                    ↓
+//   ┌─────────────────────────────────────────────────────────────────────┐
+//   │ 2. 构建索引                                                         │
+//   │    idx: Map<tracking, [gtsRow...]>     单号 → GTS 行数组            │
+//   │    used: Set<id>                       已匹配到的 GTS 订单集合        │
+//   └─────────────────────────────────────────────────────────────────────┘
+//                                    ↓
+//   ┌─────────────────────────────────────────────────────────────────────┐
+//   │ 3. 逐行循环处理原始账单                                              │
+//   │    for (r in raw rows):                                             │
+//   │      a) 基础校验（单号、重量、尺寸、UA、DAS/EDAS 互斥等）              │
+//   │      b) 查 idx 找 GTS，missingGts = (gs.length === 0)               │
+//   │      c) if (hasUA && !missingGts) → UA 特殊分支                      │
+//   │         强制用 GTS 整套数据，UA 不计成本                             │
+//   │         else → selected(r, g, settings) 正常分支                     │
+//   │      d) selected() 内部做：                                          │
+//            - ShipGridWeightPolicy.prepare() 取重决策                     │
+//            - grade() 计算原始/GTS 两套尺寸的触发等级 (0/1/2/3)          │
+//            - 等级低者优先选整套；同等级选计费重小的                       │
+//            - zone() 分区取低（GTS 分区缺失则用原始）                     │
+//            - 算 os(LPS) / ahs / bw（最低收费重）                        │
+//   │      e) day() 解析 Ship Date → 查 ShipGridFuelRates 匹配燃油费率     │
+//   │      f) 旺季判定：Demand/Resi 日期区间 + os/ahs/resi 触发            │
+//   │      g) price(t, s, r, fuel, peak) 分别算 A、B 两套完整成本          │
+//   │         完整成本 = base + resi + ahs + os + das + edas + sig + addr   │
+//                      + peak + fuel(=sum * factor * fuelRate)            │
+//   │      h) costs[0] vs costs[1] 取低 → chosen                          │
+//   │      i) 组装 output.push({...}) 一行完整结果                         │
+//   │      j) errors.push(...) 异常判断链：                                │
+//            missingGts → 进 errors（含 weightPolicy.warnings）             │
+//            else hasUA → 进 errors（含 weightPolicy.warnings）            │
+//            else warnings 非空 → 进 errors                                │
+//            catch → 进 errors（priced=false 表示没算出成本）              │
+//   └─────────────────────────────────────────────────────────────────────┘
+//                                    ↓
+//   ┌─────────────────────────────────────────────────────────────────────┐
+//   │ 4. unmatched = idx 中 used 没标记到的 GTS 订单（GTS 有但原始没有）    │
+//   │ 5. summary = 汇总计数（raw/priced/errors/provisional/A/B/...）       │
+//   │ 6. return { rows, errors, unmatched, summary, settings }             │
+//   └─────────────────────────────────────────────────────────────────────┘
+//
+// workbook(result) 输出 Excel，5 个 sheet：
+//   成本汇总 | 订单成本明细 | 异常清单 | 规则参数 | A/B 费用拆分
+// ============================================================================
 /*SG-AUDIT:finance-05.js*/ (function (root) {
-	"use strict";
-	const round = (v) => Math.round((v + Number.EPSILON) * 100 + 1e-9) / 100;
-	const ceil = (v) => Math.ceil(v - 1e-10);
+	("use strict");
+	// ---- 基础工具函数 ----
+	const round = (v) => Math.round((v + Number.EPSILON) * 100 + 1e-9) / 100; // 保留两位小数
+	const ceil = (v) => Math.ceil(v - 1e-10); // 向上取整（略减防浮点边界）
 	function n(v) {
+		// 转数字，NaN/Infinity 抛错
 		const x = Number(v ?? 0);
 		if (!Number.isFinite(x)) throw Error("无效数字");
 		return x;
 	}
 	function pos(v, k) {
+		// 转非负数字，<0 抛错
 		const x = n(v);
-		if (x <= 0) throw Error("缺少有效" + k);
+		if (x < 0) throw Error("缺少有效" + k);
 		return x;
 	}
 	function zone(v) {
+		// 解析分区字符串，取末尾数字，限定 2–8
 		const m = String(v ?? "")
 			.trim()
 			.match(/(\d+)$/);
 		if (!m || +m[1] < 2 || +m[1] > 8) throw Error("分区不完整或超出2–8区");
 		return +m[1];
 	}
+	// 把 sheet 转成对象数组：第一行当表头 key，后续每行变成 {key1: val1, key2: val2, ...}
 	function rows(wb, name) {
 		const sheet = wb.Sheets[name];
 		if (!sheet) throw Error("缺少sheet：" + name);
@@ -35,6 +98,12 @@
 			.filter((r) => r.some((v) => v !== null && v !== ""))
 			.map((r) => Object.fromEntries(h.map((k, i) => [k, r[i]])));
 	}
+	// 解析 A 或 B 方案的成本价表
+	//   base[`重量|分区`] = 基础费（weight 1-150lb × zone 2-8）
+	//   factor = 燃油支付比例（从价表右下角单元格正则匹配 0.xxxx）
+	//   resi/sig/das/edas/address = 各项固定附加费
+	//   ahs/os = 四个分区档位的 AHS / LPS 费用数组
+	//   shift: A 方案附加费区在价表第 174 行起，B 方案在第 173 行起，差 1 行
 	function tariff(wb, label) {
 		const name = wb.SheetNames.includes("OnTrac Rates")
 			? "OnTrac Rates"
@@ -66,6 +135,8 @@
 			address: pos(cell(192 + shift, 8), "改址费"),
 		};
 	}
+	// 把 Excel 日期（数字 / Date / 字符串 mm/dd/yy 或 yyyy-mm-dd）统一解析成 ISO 字符串
+	// 返回 null 表示无效或日期不在 2026-01-01 ~ 2027-01-15 之间（超出燃油覆盖范围）
 	function day(v) {
 		let y, m, d;
 		if (typeof v === "number") {
@@ -105,6 +176,13 @@
 	function inPeriod(d, start, end) {
 		return d && d >= start && d <= end;
 	}
+	// 核心决策函数：选定一套尺寸、一个分区、算出 os/ahs/bw
+	// 参数：
+	//   r        —— 原始账单的一行对象（含 CUST Lbs / DIML/W/H / Zone / 各项费用）
+	//   g        —— GTS 的一行对象（含 下单实重 / 下单长/宽/高 / 分区）
+	//              missingGts 时 g 是用原始数据伪造的替代对象
+	//   settings —— { weightUnit, dimUnit, ... } 计算参数
+	// 返回：{ dims, actual, bw, z, os, ahs, weightPolicy, dimensionChoice, zoneSource, ... }
 	function selected(r, g, settings) {
 		const wf = settings.weightUnit === "kg" ? 2.2046226218487757 : 1,
 			df = settings.dimUnit === "cm" ? 2.54 : 1;
@@ -122,6 +200,14 @@
 			gd = prelim.dims;
 		const rawDims = rd.map(ceil),
 			gtsDims = gd.map(ceil);
+		// grade(dims降序, weight) —— 按 Ontrac 尺寸规则判定触发等级
+		//   等级 0: 正常（不触发 AHS / LPS）
+		//   等级 1: 触发 AHS
+		//     长>48 或 宽>30 或 重>50 或 体积>8640
+		//   等级 2: 触发 LPS (Oversize)
+		//     长>72 或 重>110 或 体积>17280
+		//   等级 3: 超限（需人工确认）
+		//     长>108 或 长+2宽+2高>165
 		const volume = (ds) => ds.reduce((a, b) => a * b, 1);
 		const grade = (ds, weight) =>
 			ds[0] > 108 || ds[0] + 2 * ds[1] + 2 * ds[2] > 165
@@ -187,15 +273,23 @@
 					: "两者相同";
 		const [L, W, H] = dims,
 			vol = L * W * H;
+		// os = Oversize (LPS) 触发：长>72 或 重>110 或 体积>17280
 		const os = L > 72 || actual > 110 || vol > 17280;
+		// ahs = Additional Handling 触发：os=false 时满足以下任一
+		//   长>48 / 宽>30 / 重>50 / 体积>8640
+		//   如果选的是原始账单尺寸，还额外检查 Irregular / AHS 费用
+
 		const ahs =
 			!os &&
 			(L > 48 ||
 				W > 30 ||
 				actual > 50 ||
 				vol > 8640 ||
-				(useRaw &&
-					(n(r.Irregular) > 0 || n(r["Additional Handling Fee"]) > 0)));
+				(useRaw && n(r.Irregular) > 0));
+		// || n(r["Additional Handling Fee"]) > 0 26-11-12 取消默认提高到40，额外附加费
+		// bw = 最终计费重（base weight）
+		//   先取重量政策算出的 billed，再按规则抬高：
+		//   os → 至少 90lb，ahs → 至少 40lb，否则保持原样
 		const bw = Math.max(billed, os ? 90 : ahs ? 40 : 0);
 		if (actual > 150 || L > 108 || L + 2 * W + 2 * H > 165 || bw > 150)
 			throw Error("超限订单需人工确认基础运费，旺季$595规则已保留");
@@ -217,6 +311,24 @@
 			weightPolicy: wi,
 		};
 	}
+	// 完整成本计算（A 或 B 单套方案）
+	// 参数：
+	//   t     —— tariff() 解析出的价表对象（含 base / resi / ahs[] / os[] / das / edas / sig / address / factor）
+	//   s     —— selected() 返回的决策结果（含 bw / z / os / ahs / actual 等）
+	//   r     —— 原始账单行（用来判断 Residential / DAS / EDAS / Sig / Wrong Address 哪些实际收了费）
+	//   fuel  —— 燃油费率（从 ShipGridFuelRates 匹配到的那周费率，小数如 0.265）
+	//   peak  —— 旺季附加费合计（AHS + LPS + Residential + Unauthorized 的 $ 值之和）
+	// 计算：
+	//   i 分区档位：zone=2 → 0，zone=3-4 → 1，zone=5-6 → 2，zone=7-8 → 3
+	//   p.base = t.base[`bw|zone`]（价表直接查）
+	//   p.residential / p.das / p.edas / p.signature / p.address
+	//     —— 只在原始账单对应字段 > 0 时才计入，否则为 0
+	//   p.ahs = s.ahs ? t.ahs[i] : 0
+	//   p.oversize = s.os ? t.os[i] : 0
+	//   p.peak = peak（旺季直接加）
+	//   sum = base + resi + ahs + os + das + edas + sig + addr + peak
+	//   p.fuel = round(sum * fuelRate * t.factor)
+	//   p.total = sum + fuel
 	function price(t, s, r, fuel, peak) {
 		const i = s.z === 2 ? 0 : s.z <= 4 ? 1 : s.z <= 6 ? 2 : 3;
 		const p = {
@@ -235,6 +347,11 @@
 		p.total = round(sum + p.fuel);
 		return p;
 	}
+	// 主入口：读原始账单 + GTS + A/B 价表 → 逐行测算 → 返回完整结果
+	//   input    —— 用户上传的工作簿（含「原始」和「GTS」两个 sheet）
+	//   wa / wb  —— A / B 方案价表 workbook（内置在 data/ontrac-default-rates.js）
+	//   settings —— { weightUnit, dimUnit, peakAhs, peakOs, peakResi,
+	//                 peakMax, peakUnauthorized, demandStart, demandEnd, resiStart }
 	function calculate(input, wa, wb, settings) {
 		const raw = rows(input, "原始"),
 			gts = rows(input, "GTS"),
@@ -262,7 +379,6 @@
 			"Hard Copy Fee",
 			"No Release",
 			"Rebill Fee",
-			
 		];
 		const detail = [
 			"Residential Fee",
@@ -622,65 +738,75 @@
 	function resultMatrix(result) {
 		return [
 			headers,
-			...result.rows.map((r) => [
-				String(r.order),
-				String(r.customerOrder),
-				r.tracking,
-				String(r.customerId),
-				String(r.orderId),
-				r.carrierActual,
-				r.gtsActual === null ? null : ceil(r.gtsActual),
-				ceil(r.actual),
-				r.carrierBilled,
-				r.gtsBilled === null ? null : ceil(r.gtsBilled),
-				r.billed,
-				r.carrierDims,
-				r.missingGts
-					? ""
-					: r.gtsRoundedDims ||
-						r.gtsDims
-							.split("×")
-							.map((x) => ceil(Number(x)))
-							.join("×"),
-				r.dims,
-				r.carrierZone,
-				r.gtsZone,
-				r.zone,
-				r.A,
-				r.B,
-				r.min,
-				r.chosen + "价",
-				r.original,
-				r.difference,
-				r.effective,
-				r.reference,
-				r.date,
-				r.ahs ? "是" : "否",
-				r.os ? "是" : "否",
-				r.warnings,
-				r.fuelMethod === "OFFICIAL_SHIP_DATE"
-					? "官网按Ship Date"
-					: "日期异常：原账单倒推",
-				r.fuelPeriod,
-				r.fuelSource,
-				r.fuelFetchedAt,
-				r.inferredReference,
-				r.costs.some((c) => c.ahs > 0) ? "是" : "否",
-				r.costs.some((c) => c.oversize > 0) ? "是" : "否",
-				r.dimensionChoice.source,
-				r.dimensionChoice.reason,
-				["无", "AHS", "LPS", "超限"][r.dimensionChoice.rawGrade],
-				["无", "AHS", "LPS", "超限"][r.dimensionChoice.gtsGrade],
-				r.dimensionChoice.rawVolume,
-				r.dimensionChoice.gtsVolume,
-				r.volume,
-				r.dimWeight,
-				sourceDescription(r),
-				r.uaAmount || 0,
-				r.provisional ? "是" : "否",
-			]),
+			...result.rows
+				.filter((r) => String(r.order ?? "").trim() !== "")
+				.map((r) => [
+					String(r.order),
+					String(r.customerOrder),
+					r.tracking,
+					String(r.customerId),
+					String(r.orderId),
+					r.carrierActual,
+					r.gtsActual === null ? null : ceil(r.gtsActual),
+					ceil(r.actual),
+					r.carrierBilled,
+					r.gtsBilled === null ? null : ceil(r.gtsBilled),
+					r.billed,
+					r.carrierDims,
+					r.missingGts
+						? ""
+						: r.gtsRoundedDims ||
+							r.gtsDims
+								.split("×")
+								.map((x) => ceil(Number(x)))
+								.join("×"),
+					r.dims,
+					r.carrierZone,
+					r.gtsZone,
+					r.zone,
+					r.A,
+					r.B,
+					r.min,
+					r.chosen + "价",
+					r.original,
+					r.difference,
+					r.effective,
+					r.reference,
+					r.date,
+					r.ahs ? "是" : "否",
+					r.os ? "是" : "否",
+					r.warnings,
+					r.fuelMethod === "OFFICIAL_SHIP_DATE"
+						? "官网按Ship Date"
+						: "日期异常：原账单倒推",
+					r.fuelPeriod,
+					r.fuelSource,
+					r.fuelFetchedAt,
+					r.inferredReference,
+					r.costs.some((c) => c.ahs > 0) ? "是" : "否",
+					r.costs.some((c) => c.oversize > 0) ? "是" : "否",
+					r.dimensionChoice.source,
+					r.dimensionChoice.reason,
+					["无", "AHS", "LPS", "超限"][r.dimensionChoice.rawGrade],
+					["无", "AHS", "LPS", "超限"][r.dimensionChoice.gtsGrade],
+					r.dimensionChoice.rawVolume,
+					r.dimensionChoice.gtsVolume,
+					r.volume,
+					r.dimWeight,
+					sourceDescription(r),
+					r.uaAmount || 0,
+					r.provisional ? "是" : "否",
+				]),
 		];
 	}
+	// 把 calculate() 返回的 result 打包成一个完整的 Excel 工作簿
+	// 输出 5 个 sheet：
+	//   1. 成本汇总    —— 原始订单数 / 成功测算数 / 异常数 / A/B 选择比 / 最低成本合计等
+	//   2. 订单成本明细 —— 每订单 40+ 列的完整测算记录（系统订单号空白的行会被过滤掉）
+	//   3. 异常清单    —— errors 数组里的所有异常行
+	//   4. 规则参数    —— settings + 各项规则说明（分区来源、取重逻辑、尺寸选取、UA处理、燃油来源等）
+	//   5. A/B 费用拆分 —— 每订单的 A 和 B 两套方案逐费用拆解（基础/住宅/AHS/OS/DAS/EDAS/签名/改址/旺季/燃油）
+	// 返回的 workbook 对象直接交给 XLSX.writeFile 触发浏览器下载
 	function workbook(result) {
 		const X = root.XLSX,
 			w = X.utils.book_new();

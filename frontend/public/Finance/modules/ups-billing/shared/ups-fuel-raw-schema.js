@@ -1,3 +1,21 @@
+/*
+ * UPS 燃油费率历史 + 270 列无表头账单字段定义
+ * 文件: shared/ups-fuel-raw-schema.js
+ * ----------------------------------------------------------------------------
+ * 职责：
+ *   1. lookup(date, sv) — 按 Transaction Date 和服务类型（Ground/Air）
+ *      查询 UPS 官方燃油费率区间，返回 {rate, start, end, source, series}
+ *   2. headerlessSchema — UPS Billing Data 2.1 格式 270 列字段名数组
+ *   3. isHeaderless(row) / isRaw(row) — 自动检测账单格式
+ *
+ * 燃油费率来源：
+ *   SOURCE — UPS Fuel Surcharge 官方页面 JSON
+ *   FSC_SOURCE — UPS 适用费用说明 PDF
+ *   root.UPSOfficialFuel.rates — 历史费率区间（ups-fuel.js 加载）
+ *
+ * 暴露对象：root.UPSInvoiceFuel = { lookup, headerlessSchema, isHeaderless, isRaw }
+ * ----------------------------------------------------------------------------
+ */
 /*SG-AUDIT:finance-21.js*/ (function (root) {
 	"use strict";
 	const SOURCE =

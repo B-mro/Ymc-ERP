@@ -1,3 +1,58 @@
+/**
+ * ui/ups-audit.js —— UPS 审核模块 Vue 3 组合式 API 入口
+ *
+ * 本文件是 ups-audit 模块的 **唯一 UI 层入口**，采用 Vue 3 setup() 风格暴露响应式状态
+ * 和交互方法，由 module-runtime.js 在宿主页面中挂载。
+ *
+ * 与 ups-billing/ui/ups-billing.js 的分工：
+ *   - ups-billing ：正向 Ground 运输账单生成（给客户的账单）
+ *   - ups-audit   ：UPS 官方账单审核（核对 UPS 收的钱，发现多收少收）
+ *   - 两者共享 engine 层的 Ground 费率基础，但 audit 独有 174 列解析、
+ *     reconcile、returns、adjustments、correction 等模块
+ *
+ * 响应式状态（reactive/ref）：
+ *   - rawSheets      : 用户上传的 174 列 Excel 原始账单（数组，支持多文件追加）
+ *   - fuelSheet      : UPS 官方燃油费率表（Web 下载或本地导入）
+ *   - report         : reconcile 产出的审核报告骨架
+ *     report.shipments[]  每票运单（含 zone/weight/service/charge）
+ *     report.lineResults[] 逐行 reconcile 结果（实收/应收/差额/状态）
+ *     report.claims[]     可申诉运单列表
+ *     report.summary      整批汇总（总实收/总应收/总差额/申诉总额）
+ *   - filter         : UI 筛选条件（服务类型/状态/账号）
+ *   - page           : 分页状态（pageIndex / pageSize / 总数）
+ *   - loading        : Worker 线程计算中
+ *   - error          : 计算错误消息
+ *
+ * 核心交互方法：
+ *   - uploadRaw(fileList)      : 上传 174 列 Excel → XLSX 解析 → parse174
+ *   - loadFuel(file)           : 上传燃油费率表 → 按 Effective Date 排序
+ *   - downloadFuel()           : 从 UPS 官网拉取最新燃油费率区间（fetch + 缓存）
+ *   - run()                    : 触发 Worker 计算
+ *     流程：postMessage(raw + fuel + contract + history) →
+ *           audit-memory.js workerMain() →
+ *           依次调用 174-audit / ground-net / contract / returns / adjustments /
+ *                    correction / shipment-review →
+ *           回传 report → 主线程更新 report + 刷新 summary
+ *   - filterBy(cond)           : 响应式筛选（客户端过滤，无需重算）
+ *   - exportExcel()            : 大报告 → audit-xlsx-export Worker 流式写出
+ *                                小报告 → XLSX.writeFile 直接下载
+ *                                超 500MB → 降级 CSV 多文件导出（audit-csv-export）
+ *   - exportCSV(directory)     : 直接写本地目录（File System Access API）
+ *   - clear()                  : 清空所有状态，重置 Worker
+ *
+ * Worker 通信桥接：
+ *   createWorker() → 初始化 audit-memory.js Worker，
+ *   每次 run() 都 send 新 job（不重建 Worker，避免冷启动开销）
+ *
+ * 对外暴露（通过 setup() return）：
+ *   { rawSheets, fuelSheet, report, filter, page, loading, error,
+ *     uploadRaw, loadFuel, downloadFuel, run, filterBy,
+ *     exportExcel, exportCSV, clear }
+ *
+ * 依赖：root.UPS174Audit（parse174）、root.UPSInvoiceFuel（fuelDate）、
+ *       root.ShipGridAuditInstaller（workerMain）、root.ShipGridAuditXLSX、
+ *       root.ShipGridAuditCSV、XLSX、Vue 3
+ */
 /*SG-AUDIT:finance-32.js*/ /* UPS audit: explicit contract evidence, line-level reconciliation, no inferred contract rates. */
 (function (root) {
 	"use strict";

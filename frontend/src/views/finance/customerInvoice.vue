@@ -10,7 +10,7 @@
 		</iframe> -->
     <iframe
 			ref="iframeRef"
-			src="/public/Finance/index.html"
+			src="/Finance/index.html"
 			frameborder="0"
 			scrolling="auto"
 			class="invoice-frame"

@@ -1,3 +1,41 @@
+/**
+ * 文件：standard-quotes.js
+ * 路径：fedex-billing/shared/
+ * 职责：ShipGrid 标准价表（SG-QUOTE-1 / SG-QUOTE-2 两种格式）的生成、下载、解析、校验。
+ *       是 quote-validators.js 遇到标准价表时调用的"解析后端"；也是 quote-manager.js 里
+ *       "下载标准价表"按钮的实现。
+ *
+ * 对外暴露：globalThis.ShipGridStandardQuotes = { is, parse, validate, workbook, download, modelFor }
+ *
+ *   is(wb)                    → 布尔，判断 wb.SheetNames 是否含 "SG标准价表"
+ *   modelFor(carrier)         → 深拷贝 ShipGridQuoteDefaults[carrier]（来自 peak-defaults.js，全是 null 的空模板）
+ *   validate(model, carrier)  → 字段级校验：base 完整性、factor 范围（0–1）、日期格式、旺季区间不重叠、尺寸字段>0 等
+ *   workbook(carrier, model?) → 把 model 写成 SG-QUOTE-2 结构的工作簿（UPS 分 Commercial/Residential，FedEx 含 SmartPost 附加列）
+ *   parse(wb, carrier)        → 同时兼容 SG-QUOTE-1（单"基础运费"表）和 SG-QUOTE-2（多工作表），统一返回完整 model
+ *   download(carrier, wb?)    → 浏览器直接下载 .xlsx；未给 wb 时用 modelFor(carrier) 构造空白模板
+ *
+ * 内部辅助（不对外暴露，文件内使用）：
+ *   label(path)        → 把 "comm.demand.1.ahs" 之类字段路径翻译成可读中文标签，用于模板
+ *   leaves(model)      → 把嵌套对象拍平成 { path, value } 数组，方便逐字段校验
+ *   seasonal(path)     → 判断字段是否属于 demand / resiDemand 旺季数组
+ *   seasonSpec(carrier) → 各家旺季字段结构定义（简单对象 or 数组，子键类型：date / number / optional）
+ *   parseV1(wb, carrier) / workbookV1  → SG-QUOTE-1 格式的读写，SG-QUOTE-2 解析时先把多工作表合成 V1 再走这套
+ *   engine(carrier)    → 取对应 carrier 的 billing engine（FedExBilling / OnTracBilling / UPSBilling），download 时用它解析已有报价
+ *
+ * 工作簿结构（SG-QUOTE-2，当前推荐格式）：
+ *   ├─ "SG标准价表"    元信息（格式版本、承运商、币种、尺寸规则说明、旺季官网来源、核对日期等）
+ *   ├─ "{承运商}基础运费"  主基础运费表（FedEx 附 SmartPost 分区列；UPS 分两张）
+ *   ├─ "计费参数"      除 base 以外的所有单项参数（factor / dim / resi / ahsD / dasR 等）
+ *   └─ "旺季参数"      demand / resiDemand 数组，字段代码形如 "demand.0.ahs"、"comm.resiDemand.2.fee"
+ *
+ * 调用方：
+ *   - quote-validators.js.ontrac / fedex / ups  → 遇到 is(wb) 时委托 parse
+ *   - quote-manager.js 的 downloadStandard / downloadQuoteTemplate
+ *
+ * 依赖：
+ *   - ShipGridQuoteDefaults / ShipGridPeakDefaults（来自 peak-defaults.js）
+ *   - XLSX（vendor/xlsx.full.min.js）
+ */
 /*SG-AUDIT:finance-09.js*/ (function (root) {
 	"use strict";
 	const X = () => root.XLSX,

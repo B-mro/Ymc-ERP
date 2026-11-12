@@ -1,276 +1,284 @@
-/*SG-AUDIT:finance-14.js*/ const BillingApp = ShipGridModule.createApp({
-	setup() {
-		const files = Vue.reactive({
-				invoice: null,
-				gts: null,
-				child: null,
-				quote: null,
-			}),
-			result = Vue.shallowRef(null),
-			busy = Vue.ref(false),
-			error = Vue.ref(""),
-			search = Vue.ref(""),
-			customer = Vue.ref("all"),
-			page = Vue.ref(1),
-			showAll = Vue.ref(false),
-			fuelRefreshing = Vue.ref(false),
-			fuelMessage = Vue.ref("");
-		const slots = [
-			{
-				key: "invoice",
-				title: "原始账单Excel",
-				hint: "可包含「原始」「GTS」两个sheet",
-			},
-			{
-				key: "gts",
-				title: "GTS系统数据（可选）",
-				hint: "账单文件已有GTS时，无需另上传",
-			},
-			{
-				key: "child",
-				title: "子单账单",
-				hint: "原始或GTS文件已有子单账单时自动读取；提供分区代码及住宅、偏远/超偏远收费依据",
-			},
-			{
-				key: "quote",
-				title: "客户报价Excel",
-				hint: "上传完整报价，如ONTRAC RATE-C.xlsx",
-			},
-		];
-		const ready = Vue.computed(
-			() => !!files.invoice && pricing.pricingReady(files.quote),
-		);
-		function clear() {
-			result.value = null;
-			error.value = "";
-			page.value = 1;
-		}
-		const pricing = ShipGridQuoteManager.use("ontrac", clear);
-		window.addEventListener("fuel-rates-updated", clear);
-		async function upload(file, key) {
-			if (!file || busy.value) return;
-			clear();
-			files[key] = null;
-			busy.value = true;
-			try {
-				if (!/\.(xlsx|xls)$/i.test(file.name)) throw Error("请选择Excel文件");
-				if (file.size > 200 * 1024 * 1024) throw Error("文件不能超过200MB");
-				files[key] = {
-					name: file.name,
-					wb: Vue.markRaw(
-						XLSX.read(await file.arrayBuffer(), {
-							type: "array",
-							cellDates: false,
-							dense: true,
-						}),
-					),
-				};
-			} catch (e) {
-				error.value = e.message;
-			} finally {
-				busy.value = false;
-			}
-		}
-		async function run() {
-			busy.value = true;
-			clear();
-			try {
-				await new Promise((r) => setTimeout(r, 30));
-				const rawWb = files.invoice.wb,
-					gtsWb = files.gts?.wb || rawWb;
-				const raw = rawWb.Sheets[ShipGridChildInvoice.rawName(rawWb)],
-					gts =
-						gtsWb.Sheets["GTS"] ||
-						(files.gts ? gtsWb.Sheets[gtsWb.SheetNames[0]] : null);
-				if (!gts) throw Error("需要上传GTS或在账单内提供GTS sheet");
-				const input = {
-					SheetNames: ["原始", "GTS"],
-					Sheets: { 原始: raw, GTS: gts },
-				};
-				const selection = await pricing.preparePricing(files.quote);
-				const child = ShipGridChildInvoice.select(files);
-				result.value = OnTracBilling.calculate(input, selection.value, {
-					childInvoice: child,
-				});
-				result.value.quoteName = selection.name;
-				customer.value = "all";
-				search.value = "";
-				page.value = 1;
-			} catch (e) {
-				error.value = e.message;
-			} finally {
-				busy.value = false;
-			}
-		}
+/**
+ * OnTrac 账单 UI 层。
+ * 与 FedEx/UPS 的 UI 层职责一致：
+ *   - 上传账单、报价、GTS、燃油、覆盖表
+ *   - 管理模块级运行时状态（module-runtime）
+ *   - 调用核心引擎执行 A/B 方案测算
+ *   - 分页浏览结果、下载多 Sheet Excel
+ *
+ * 相比 FedEx UI 层，OnTrac 专属差异：
+ *   - 分区来源不是 GTS zone，而是账单自带 zone 字段或 overrides
+ *   - 附加费类型（residential / rural / oversized / handling / peak）与 FedEx 略有区别
+ */
+import { reactive, computed, toRefs, watch } from "vue";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import * as engine from "../engine/ontrac-billing.js";
+import { createModuleRuntime } from "../shared/module-runtime.js";
+import { defaultPeak } from "../data/peak-defaults.js";
+import { fuelRates as ontracFuelDefault } from "../data/ontrac-fuel.js";
 
-		async function refreshFuel() {
-			fuelRefreshing.value = true;
+/** 解析任意 Excel 文件成 JSON 行数组 */
+function parseWorkbook(file) {
+	return new Promise((resolve, reject) => {
+		if (!file) return resolve([]);
+		const reader = new FileReader();
+		reader.onload = (e) => {
 			try {
-				if (location.protocol === "file:")
-					throw Error(
-						"单文件模式使用内置官方历史费率；自动抓取需运行源码包中的fuel_server.py或接入公司服务器接口",
-					);
-				const response = await fetch("/api/ontrac/surcharge/history", {
-					method: "GET",
-				});
-				const raw = await response.json();
-				if (!response.ok) throw Error(raw.msg || raw.error || "官网更新失败");
-				const data = raw.data;
-				if (
-					!Array.isArray(data.rates) ||
-					!data.rates.length ||
-					data.source !== "https://www.ontrac.com/surchargesandrates/" ||
-					data.rates.some(
-						(x) =>
-							!Number.isFinite(x.rate) ||
-							x.rate <= 0 ||
-							x.rate >= 1 ||
-							x.start > x.end,
-					)
-				)
-					throw Error("官方费率数据校验失败");
-				globalThis.ShipGridFuelRates = data;
-				window.dispatchEvent(new Event("fuel-rates-updated"));
-				// invalidate();
-				fuelMessage.value =
-					"官网费率已更新，共" + data.rates.length + "周；请重新计算";
-			} catch (e) {
-				fuelMessage.value = e.message;
-			} finally {
-				fuelRefreshing.value = false;
+				const data = new Uint8Array(e.target.result);
+				const wb = XLSX.read(data, { type: "array" });
+				const rows = [];
+				for (const sheetName of wb.SheetNames) {
+					rows.push(...XLSX.utils.sheet_to_json(wb.Sheets[sheetName]));
+				}
+				resolve(rows);
+			} catch (err) {
+				reject(err);
 			}
-		}
-		const filtered = Vue.computed(() => {
-			if (!result.value) return [];
-			return result.value.rows.filter(
-				(r) =>
-					(customer.value === "all" || r.customerId === customer.value) &&
-					[r.tracking, r.order].some((x) =>
-						String(x ?? "")
-							.toLowerCase()
-							.includes(search.value.toLowerCase()),
-					),
-			);
-		});
-		const pages = Vue.computed(() =>
-				Math.max(1, Math.ceil(filtered.value.length / 20)),
-			),
-			visible = Vue.computed(() =>
-				filtered.value.slice((page.value - 1) * 20, page.value * 20),
-			);
-		Vue.watch([customer, search], () => (page.value = 1));
-		const columns = Vue.computed(() => {
-			if (!result.value) return [];
-			const hs = result.value.headers;
-			const keys = [
-				"客户ID",
-				"客户名称",
-				"采用报价表",
-				"Waybill#/tracking#",
-				"Ship date",
-				"Weight",
-				"Cust Lbs",
-				"DIML",
-				"DIMW",
-				"DIMH",
-				"Zone",
-				"ServiceCharge",
-				"Residential Fee",
-				"Delivery Area Fee",
-				"Extended Area Fee",
-				"Additional Handling Fee",
-				"Oversize Fee",
-				"Resi Sig",
-				"Wrong Address Fee",
-				"Peak Add Handling",
-				"Peak Oversize",
-				"Peak Residential",
-				"Fuel Surcharge",
-				"TotalCharge",
-				"警示",
-			];
-			return showAll.value
-				? hs.map((h, i) => ({ h, i }))
-				: keys
-						.map((k) => ({
-							h: k,
-							i: hs.findIndex((h) => String(h ?? "").trim() === k),
-						}))
-						.filter((x) => x.i >= 0);
-		});
-		const selectionTotal = Vue.computed(() =>
-			OnTracEngine.utils.round(filtered.value.reduce((s, r) => s + r.total, 0)),
-		);
-		async function download() {
-			if (!result.value) return;
-			busy.value = true;
-			try {
-				const bytes = OnTracBilling.bytes(result.value, customer.value);
-				const blob = new Blob([bytes], {
-						type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-					}),
-					a = document.createElement("a"),
-					url = URL.createObjectURL(blob);
-				a.href = url;
-				a.download =
-					"OnTrac_客户账单_" +
-					(customer.value === "all" ? "全部客户" : customer.value) +
-					"_V3_54" +
-					"（" +
-					String(files.invoice?.name || "原始数据").replace(/\.xlsx?$/i, "") +
-					"）.xlsx";
-				a.click();
-				setTimeout(() => URL.revokeObjectURL(url), 1000);
-			} catch (e) {
-				error.value = "导出失败：" + e.message;
-			} finally {
-				busy.value = false;
-			}
-		}
-		const childStatus = Vue.computed(() =>
-			ShipGridChildInvoice.describe(files),
-		);
-		function removeChild() {
-			files.child = null;
-			clear();
-		}
-		return {
-			...pricing,
-			childStatus,
-			removeChild,
-			refreshFuel,
-			fuelRefreshing,
-			fuelMessage,
-			slots,
-			files,
-			result,
-			busy,
-			error,
-			search,
-			customer,
-			page,
-			pages,
-			visible,
-			filtered,
-			ready,
-			run,
-			download,
-			columns,
-			showAll,
-			selectionTotal,
-			money: (v) =>
-				Number(v).toLocaleString("en-US", {
-					minimumFractionDigits: 2,
-					maximumFractionDigits: 2,
-				}),
-			input: (e, k) => upload(e.target.files[0], k),
-			drop: (e, k) => upload(e.dataTransfer.files[0], k),
-			display: (v) =>
-				typeof v === "number"
-					? Number.isInteger(v)
-						? String(v)
-						: String(+v.toFixed(6))
-					: String(v ?? ""),
 		};
-	},
-}).mount("#billing-app");
+		reader.onerror = () => reject(reader.error);
+		reader.readAsArrayBuffer(file);
+	});
+}
+
+/** 模块级 reactive 状态初始化 */
+function initState() {
+	return {
+		runtime: createModuleRuntime({ moduleId: "ontrac-billing" }),
+		billFile: null,
+		quoteFile: null,
+		gtsFile: null,
+		fuelFile: null,
+		overridesFile: null,
+		defaultRatesFile: null,
+
+		billRows: [],
+		quoteRows: [],
+		gtsMap: null,
+		overrides: [],
+		defaultRates: null,
+
+		policy: {
+			flatFee: 0,
+			percentFee: 0,
+			dimDivisor: 139,
+			weightSource: "raw",
+			precision: 1,
+			defaultZone: 0,
+		},
+		fuelPercent: 0,
+		results: [],
+		totals: null,
+		loading: false,
+		error: null,
+
+		page: 1,
+		pageSize: 50,
+	};
+}
+
+/** 将 GTS 文件行按 trackingNo 建立 Map 以便快速匹配 */
+function buildGtsMap(rows) {
+	const map = new Map();
+	for (const row of rows) {
+		const t = String(
+			row.trackingNo || row.TrackingNo || row.TrackingNumber || "",
+		).trim();
+		if (t) map.set(t, row);
+	}
+	return map;
+}
+
+/** 从覆盖表文件行中解析 overrides 列表 */
+function buildOverrides(rows) {
+	return rows
+		.map((r) => ({
+			customerId: String(
+				r.customerId ?? r.CustomerID ?? r.CustomerId ?? r.Account ?? "",
+			).trim(),
+			trackingNo: String(
+				r.trackingNo ?? r.TrackingNo ?? r.Tracking ?? "",
+			).trim(),
+			zone: r.zone ?? r.Zone,
+			weight: r.weight ?? r.Weight,
+			service: r.service ?? r.Service ?? r.mode ?? r.Mode ?? "",
+		}))
+		.filter((o) => o.customerId && o.trackingNo);
+}
+
+/** 匹配优先级：先按 customerId + trackingNo，再按 trackingNo 单键 */
+function findOverride(overrides, row) {
+	const trackingNo = String(
+		row.trackingNo || row.TrackingNo || row.Tracking || "",
+	).trim();
+	const customerId = String(
+		row.customerId || row.CustomerID || row.CustomerId || row.Account || "",
+	).trim();
+	if (!trackingNo) return null;
+	const exact = overrides.find(
+		(o) => o.customerId === customerId && o.trackingNo === trackingNo,
+	);
+	if (exact) return exact;
+	return overrides.find((o) => o.trackingNo === trackingNo) || null;
+}
+
+/** 将默认费率表（DefaultRates.xlsx）按 service → zone 展开 */
+function buildDefaultRates(rows) {
+	const table = {};
+	for (const row of rows) {
+		const svc = (row.service || row.Service || row.mode || "Ground")
+			.toString()
+			.trim();
+		if (!table[svc]) table[svc] = {};
+		for (const key of Object.keys(row)) {
+			if (/zone/i.test(key)) {
+				const zoneNum = Number(String(key).replace(/[^\d]/g, ""));
+				if (Number.isFinite(zoneNum)) {
+					table[svc][zoneNum] = Number(row[key]) || 0;
+				}
+			}
+		}
+	}
+	return table;
+}
+
+/** 创建并返回 OnTrac 账单模块的 Vue 3 组合式 API 模块对象 */
+export function createOnTracBilling() {
+	const state = reactive(initState());
+
+	const totalPages = computed(() =>
+		Math.max(1, Math.ceil(state.results.length / state.pageSize)),
+	);
+	const pagedResults = computed(() => {
+		const start = (state.page - 1) * state.pageSize;
+		return state.results.slice(start, start + state.pageSize);
+	});
+
+	watch(
+		() => state.results.length,
+		() => {
+			state.page = 1;
+		},
+	);
+
+	/** 上传账单文件，解析为 JSON 行 */
+	async function onBillUpload(file) {
+		state.billFile = file;
+		state.billRows = await parseWorkbook(file);
+	}
+
+	/** 上传报价文件 */
+	async function onQuoteUpload(file) {
+		state.quoteFile = file;
+		state.quoteRows = await parseWorkbook(file);
+	}
+
+	/** 上传 GTS 尺寸重量文件 */
+	async function onGtsUpload(file) {
+		state.gtsFile = file;
+		const rows = await parseWorkbook(file);
+		state.gtsMap = buildGtsMap(rows);
+	}
+
+	/** 上传燃油费率文件 */
+	async function onFuelUpload(file) {
+		state.fuelFile = file;
+		const rows = await parseWorkbook(file);
+		if (rows.length > 0) {
+			state.fuelPercent =
+				Number(
+					rows[0].fuelPercent ?? rows[0].FuelPercent ?? rows[0].fuel ?? 0,
+				) || 0;
+		}
+	}
+
+	/** 上传逐单覆盖表 */
+	async function onOverridesUpload(file) {
+		state.overridesFile = file;
+		const rows = await parseWorkbook(file);
+		state.overrides = buildOverrides(rows);
+	}
+
+	/** 上传默认费率表（DefaultRates.xlsx） */
+	async function onDefaultRatesUpload(file) {
+		state.defaultRatesFile = file;
+		const rows = await parseWorkbook(file);
+		state.defaultRates = buildDefaultRates(rows);
+	}
+
+	/** 一键应用默认燃油率（ontrac-fuel.js 缓存） */
+	function applyDefaultFuel() {
+		const pct = Number(
+			ontracFuelDefault?.Ground ?? ontracFuelDefault?.ground ?? 0,
+		);
+		state.fuelPercent = pct;
+	}
+
+	/** 主计算入口：调用引擎 calculate，附加 overrides 匹配和 fuel/surcharge/peak */
+	async function run() {
+		if (!state.billRows.length) {
+			state.error = "请先上传 OnTrac 账单文件";
+			return;
+		}
+		state.loading = true;
+		state.error = null;
+		try {
+			const opts = {
+				policy: { ...state.policy },
+				gtsMap: state.gtsMap,
+				overrides: state.overrides,
+				defaultZone: state.policy.defaultZone || 0,
+				fuelTable: { Ground: state.fuelPercent },
+				surchargeTable: null,
+				peakTable: defaultPeak.ontrac || null,
+				defaultRates: state.defaultRates,
+			};
+			const result = await engine.calculate(
+				state.billRows,
+				state.quoteFile,
+				opts,
+			);
+			state.results = result.results;
+			state.totals = result.totals;
+		} catch (err) {
+			state.error = err?.message || String(err);
+		} finally {
+			state.loading = false;
+		}
+	}
+
+	/** 下载完整 A/B 方案 Excel 工作簿 */
+	function download() {
+		if (!state.results.length) return;
+		const wb = engine.workbook(state.results, state.totals || {}, {});
+		const buf = engine.bytes(wb);
+		const blob = new Blob([buf], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		});
+		saveAs(
+			blob,
+			`ontrac-billing-${new Date().toISOString().slice(0, 10)}.xlsx`,
+		);
+	}
+
+	/** 重置所有状态字段 */
+	function reset() {
+		Object.assign(state, initState());
+	}
+
+	return {
+		...toRefs(state),
+		totalPages,
+		pagedResults,
+		onBillUpload,
+		onQuoteUpload,
+		onGtsUpload,
+		onFuelUpload,
+		onOverridesUpload,
+		onDefaultRatesUpload,
+		applyDefaultFuel,
+		run,
+		download,
+		reset,
+	};
+}

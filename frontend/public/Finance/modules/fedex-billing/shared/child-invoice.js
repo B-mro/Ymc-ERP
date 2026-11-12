@@ -1,14 +1,36 @@
-/*SG-AUDIT:finance-10.js*/ (function (root) {
-	"use strict";
+/**
+ * child-invoice.js — 子单账单自动识别与多维度匹配
+ * =====================================================
+ * 职责：
+ *   1. 从原始账单/GTS/独立文件中自动识别"子单账单"工作表
+ *   2. 多维度匹配（运单号 → 转单号别名 → 订单号 → 客户单号）
+ *   3. 提取住宅费、偏远费（DAS/EDAS/Remote）、分区代码证据
+ *   4. 为最终输出表追加子单相关字段
+ *
+ * 背景：FedEx SmartPost/UPS Ground Economy 等服务由子承包商（如 USPS）
+ *   完成末端派送，原始 GTS 订单不含子单的住宅费/偏远费/分区信息。
+ *   子单账单模块负责从单独上传的子承包商账单中补全这些信息。
+ *
+ * 被谁依赖：fedex-billing.js（FedEx SmartPost 场景）、ups-billing.js（UPS Ground Economy）
+ *
+ * 对外接口：ShipGridChildInvoice = { select, describe, build, evidence, zoneFor, pieces, areas, finalize, rawName }
+ */
+(function (root) {
+	("use strict");
+
+	/** 标准化：去空格 + 小写，用于模糊匹配表头 */
 	const norm = (v) =>
 			String(v ?? "")
 				.trim()
 				.replace(/\s+/g, "")
 				.toLowerCase(),
+		/** 标准化：去空格 + 大写，用于运单号等精确匹配 */
 		id = (v) =>
 			String(v ?? "")
 				.trim()
 				.toUpperCase();
+
+	/** 运单号字段可能的中英文表头名称 */
 	const trackingNames = [
 		"运单号",
 		"物流单号",
@@ -18,6 +40,8 @@
 		"转单号",
 		"子单号",
 	];
+
+	/** 住宅费字段可能的中英文表头名称 */
 	const feeNames = [
 		"住宅地址附加费",
 		"住宅附加费",
@@ -26,7 +50,9 @@
 		"Residential Delivery",
 		"Residential Surcharge",
 	];
+
 	const zoneNames = ["分区代码", "Zone Code"],
+		/** 偏远费分类：generic(通用)/R(住宅)/C(商业) 三类 */
 		areaNames = {
 			das: [
 				"偏远费",
@@ -53,7 +79,11 @@
 		};
 	const orderNames = ["订单号", "系统订单号"],
 		referenceNames = ["客户单号", "客户参考号"];
+
+	/** 判断工作表名是否包含"子单账单"特征 */
 	const named = (n) => /子单.*账单|child[ _-]*(invoice|bill)/i.test(n);
+
+	/** 用 XLSX 把工作表转为二维数组（header:1, raw:true） */
 	function matrix(wb, name) {
 		return XLSX.utils.sheet_to_json(wb.Sheets[name], {
 			header: 1,
@@ -62,6 +92,14 @@
 			range: 0,
 		});
 	}
+
+	/**
+	 * layout — 自动探测子单账单工作表的表头结构
+	 * 在前 20 行中寻找同时具备"至少一种费用/分区列"和"至少一种标识列（运单号/订单号/客户单号）"的行
+	 * @param {object} wb — XLSX workbook
+	 * @param {string} name — 工作表名
+	 * @returns {object|null} 解析出的列索引映射，null 表示不是子单账单表
+	 */
 	function layout(wb, name) {
 		const a = matrix(wb, name);
 		for (let hi = 0; hi < Math.min(a.length, 20); hi++) {
@@ -93,6 +131,13 @@
 		}
 		return null;
 	}
+
+	/**
+	 * select — 从多个上传文件中选出子单账单工作表
+	 * 优先顺序：原始账单内嵌 → GTS 内嵌 → 独立上传文件
+	 * @param {object} files — { invoice, gts, child } 各文件对象
+	 * @returns {{wb, name, source, embedded}|null} 选中的工作表信息
+	 */
 	function select(files) {
 		for (const [key, label] of [
 			["invoice", "原始账单文件"],
@@ -128,6 +173,11 @@
 		}
 		return null;
 	}
+	/**
+	 * describe — 生成子单账单识别结果的人类可读描述
+	 * @param {object} files — 同 select 的参数
+	 * @returns {string} 描述文本，用于前端提示
+	 */
 	function describe(files) {
 		try {
 			const s = select(files);
@@ -140,6 +190,25 @@
 			return e.message;
 		}
 	}
+
+	/**
+	 * build — 把子单账单工作表解析为可查询的多维度索引
+	 * @param {{wb, name, source, embedded}|null} spec — select() 返回值，null 表示无文件
+	 * @returns {{
+	 *   match(tracking, g), count, source
+	 * }}
+	 *   - match: 多维度匹配函数（见下）
+	 *   - count: 子单账单总行数
+	 *   - source: 文件来源字符串
+	 *
+	 * match(tracking, g) 匹配优先级：
+	 *   1. 运单号精确匹配（含 96 开头 20 位长号 → 后 12 位别名）
+	 *   2. 转单号/主单号/子单号别名匹配
+	 *   3. GTS 系统订单号匹配
+	 *   4. 客户单号匹配
+	 *
+	 * 返回值含：matched, amount(住宅费), zone, areas(各类偏远费金额), status, source
+	 */
 	function build(spec) {
 		const tracks = new Map(),
 			orders = new Map(),
@@ -256,6 +325,14 @@
 		}
 		return { match, count, source: spec.source };
 	}
+	/**
+	 * evidence — 综合原始订单与子单账单的住宅费证据
+	 * @param {object} index     — build() 返回的 match 索引
+	 * @param {string} tracking  — 运单号
+	 * @param {object} g         — GTS 订单行
+	 * @param {boolean} original — GTS 原始订单是否已含住宅标记
+	 * @returns {object} 住宅费决策：matched, amount, original, added(是否由子单补收), decision
+	 */
 	function evidence(index, tracking, g, original) {
 		const c = index.match(tracking, g);
 		return {
@@ -269,6 +346,14 @@
 					: "未触发住宅费",
 		};
 	}
+
+	/**
+	 * zoneFor — 从子单账单匹配结果提取分区代码（2-8 整数）
+	 * 支持格式："Zone 5"、"5"、"05" 等
+	 * @param {object} c — match() 返回值
+	 * @returns {number} 2-8 的整数分区
+	 * @throws 未匹配或分区无效时抛错
+	 */
 	function zoneFor(c) {
 		if (!c.matched) throw Error("子单账单未匹配：无法取得分区代码");
 		const m = String(c.zone ?? "")
@@ -277,11 +362,27 @@
 		if (!m) throw Error("子单账单分区代码缺失或无效：" + String(c.zone ?? ""));
 		return +m[1];
 	}
+
+	/**
+	 * pieces — 从 GTS 行提取件数并校验为正整数
+	 * @param {object} g — GTS 订单行
+	 * @returns {number} 件数
+	 */
 	function pieces(g) {
 		const n = Number(g["件数"]);
 		if (!Number.isInteger(n) || n < 1) throw Error("GTS件数缺失或无效");
 		return n;
 	}
+
+	/**
+	 * areas — 综合原始订单与子单账单的偏远费类型判定
+	 * @param {object} c         — match() 返回值
+	 * @param {Set<string>} original — 原始订单已有的偏远类型集合
+	 * @param {boolean} resi     — 订单是否为住宅
+	 * @param {boolean} eco      — 是否为 Ground Economy 服务（不支持 Remote）
+	 * @returns {{types: Set, added: string[]}} types 为合并后的最终类型，added 为子单新增类型
+	 * @throws 商业/住宅偏远费冲突、类型冲突、Remote 在 Economy 场景等抛错
+	 */
 	function areas(c, original, resi, eco = false) {
 		const out = new Set(),
 			a = c.areas || {},
@@ -308,6 +409,15 @@
 			throw Error("Ground Economy报价没有Remote偏远费项目");
 		return { types: all, added: [...out] };
 	}
+	/**
+	 * finalize — 把所有子单相关字段追加到最终结果对象（列头 + 数据行 + 汇总）
+	 * @param {object} result — 主引擎已构建的 result 对象
+	 * @param {{match, count, source}} index — build() 返回值
+	 * @returns {object} 修改后的 result
+	 *
+	 * 追加的列：子单账单来源、匹配状态、住宅费金额、判定来源、补收标记、
+	 *   子单分区代码、分区计费来源、GTS件数、多件判定、偏远费证据、补入类型、保护前重量
+	 */
 	function finalize(result, index) {
 		const hs = [
 			"子单账单来源",
@@ -355,6 +465,13 @@
 		result.childInvoice = { source: index.source, rows: index.count };
 		return result;
 	}
+
+	/**
+	 * rawName — 从 workbook 中找出"原始"账单工作表名
+	 * 查找优先级：精确匹配 "原始" → 以"原始"开头 → 第一个工作表
+	 * @param {object} wb — XLSX workbook
+	 * @returns {string} 工作表名
+	 */
 	function rawName(wb) {
 		return (
 			wb.SheetNames.find((n) => n.trim() === "原始") ||
@@ -362,6 +479,8 @@
 			wb.SheetNames[0]
 		);
 	}
+
+	/** 对外暴露统一接口 */
 	root.ShipGridChildInvoice = {
 		select,
 		describe,

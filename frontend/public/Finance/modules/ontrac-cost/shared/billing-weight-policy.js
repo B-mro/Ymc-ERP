@@ -1,3 +1,40 @@
+// ============================================================================
+// shared/billing-weight-policy.js —— 重量政策核心算法（跨模块共享）
+// ----------------------------------------------------------------------------
+// V3.53: carrier-rated weight + independently measured GTS inputs.
+// 被 ontrac-cost、ontrac-billing、fedex-billing、ups-billing 等多个模块复用。
+//
+// 本模块只做一件事：根据「原始账单重量数据」和「GTS 系统实测数据」，
+// 算出最终应该用哪个重量作为计费重、哪个尺寸作为整套尺寸。
+//
+// 对外暴露三个东西：
+//   prepare(g, o)   —— 主函数，返回重量/尺寸决策对象
+//   price(table, zone, weight, prior, preferred) —— 查价表 + 价格保护逻辑
+//   ceil            —— 向上取整工具函数
+//
+// prepare() 的核心决策流程：
+//   1. 读取 g（GTS 行对象）里的 下单实重 / 下单长宽高 / 单位信息
+//      如果 g.__weightPolicyMissingGts === true 表示 GTS 整条缺失
+//   2. 重量单位 kg → lb 乘 2.2046226218487757
+//      尺寸单位 cm → inch 除 2.54
+//   3. GTS 实重向上取整 → ga
+//      GTS 尺寸换算后向上取整、降序排列 → gd
+//   4. GTS 体积重 = volume(gd) / divisor（Ontrac 固定 275）
+//      体积 ≤ exemptVolume 时体积重按 0 处理
+//   5. 生成 warnings 数组（GTS 实重缺失、GTS 尺寸不完整等）
+//   6. 返回决策结果：
+//        actual      —— 最终采用的实重（ga ?? rawActual）
+//        dims        —— 最终采用的整套尺寸（gd ?? fallback 原始尺寸）
+//        reference   —— GTS 侧三项取大 = max(ga, gtsDim)，只用来比较
+//        maximum     —— 最终计费重 = min(rawBilled, max(ga, gtsDim))
+//        warnings    —— 异常/提示列表
+//        reason      —— 人可读的取重说明
+//
+// price() 处理「价格保护」场景：
+//   如果客户有一个已确认的 prior 价格，而新算出的 listed 价格更低，
+//   不直接用新价，而是去价表里找一个不低于 weight 的重量档，
+//   其价格恰好等于 prior 的那条记录，保持客户既有合约价不变。
+// ============================================================================
 /*SG-AUDIT:billing-weight-policy.js*/ /** V3.53: carrier-rated weight + independently measured GTS inputs. */
 (function (root) {
 	const up = (n) => Math.ceil(n - 1e-10);
@@ -24,6 +61,7 @@
 		);
 	}
 	function prepare(g, o) {
+		console.log(g, o);
 		const raw = positive(o.rawBilled, "原始最终计费重");
 		if (raw === null) throw Error("缺少原始最终计费重，不自动用GTS替代");
 		const divisor = positive(o.divisor, "体积重系数");
@@ -38,6 +76,7 @@
 			? [null, null, null]
 			: ["下单长", "下单宽", "下单高"].map((k) => positive(g[k], "GTS" + k));
 		const complete = inputs.every((v) => v !== null);
+
 		const gd = complete
 			? inputs.map((v) => up(v * factor(du, "dim"))).sort((a, b) => b - a)
 			: null;
@@ -73,7 +112,7 @@
 			actual,
 			dims: gd ?? fallback,
 			reference: Math.max(ga ?? 0, dim ?? 0),
-			maximum: Math.max(up(raw), ga ?? 0, dim ?? 0),
+			maximum: Math.min(up(raw), Math.max(ga ?? 0, dim ?? 0)),
 			warnings,
 			reason:
 				"取重=max(原始最终计费重" +

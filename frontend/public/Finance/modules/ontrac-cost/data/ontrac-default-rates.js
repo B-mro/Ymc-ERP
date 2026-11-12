@@ -1,3 +1,22 @@
+// ============================================================================
+// data/ontrac-default-rates.js —— 内置 A/B 两套成本价表（XLSX JSON 快照）
+// ----------------------------------------------------------------------------
+// 把 Ontrac A 方案和 B 方案的成本价表，以 XLSX 单元格格式直接内嵌到 JS 里。
+// 这样用户打开页面就能立刻算，无需上传价表文件。
+//
+// 数据结构是 XLSX 库的 Sheet 对象格式：
+//   A4: { v: "Zone & Weight", t: "s" }
+//   B6: { v: 3.85, t: "n" }     ← 1lb / Zone 2 的基础运费 = $3.85
+//
+// A 和 B 两个方案分别挂在 globalThis.ShipGridDefaultRates.A / .B 上，
+// ui/ontrac-cost.js 里初始化 files 时默认引用这两个内置 wb。
+//
+// 引擎 tariff() 函数会从这个 wb 里解析出：
+//   - 基础费矩阵 base[`重量|分区`] = 价格
+//   - 燃油支付比例 factor（从价表右下角某个单元格正则匹配 0.xxxx）
+//   - 住宅费 resi、签名费 sig、DAS/EDAS、改址费
+//   - AHS 四档分区、OS（LPS）四档分区
+// ============================================================================
 /*SG-AUDIT:finance-03.js*/ globalThis.ShipGridDefaultRates = {
 	A: {
 		name: "OnTrac-A 成本(1).xlsx",

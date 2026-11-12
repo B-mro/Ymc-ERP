@@ -1,3 +1,85 @@
+/**
+ * 文件：quote-manager.js
+ * 路径：fedex-billing/shared/
+ * 职责：报价 / 客户 / 客户匹配规则 的"本地浏览器 IndexedDB + 共享服务器 + 文件接口"三层存储管理器，
+ *       同时挂载一个 Vue UI 弹窗（id="quote-manager"）用于手工维护。
+ *
+ * 文件分两段 IIFE：
+ *   ── 第一段 IIFE（root.ShipGridShared）──
+ *     公司共享服务器（/api/shared）+ 固定文件接口（/api/excel/files）的通信层。
+ *     提供三种模式：
+ *       "local"  — 纯本机浏览器存储（默认），serverBase/fileApi 都不连
+ *       "files"  — 价表只读 /api/excel/files（由服务器直接暴露 xlsx 目录），客户资料和匹配仍在本机 IndexedDB
+ *       "shared" — 完整共享，所有 quotes / customers / rules 走服务器 /api/shared 接口
+ *
+ *     对外暴露（root.ShipGridShared）：
+ *       state          : Vue.reactive，mode / fileApi / base / token / revision / connected / busy / error / statuses / listLoaded
+ *       fixed          : 从文件接口拉回来的价表清单（无 data 的元信息）
+ *       isRemote()     → 当前是否走 shared 模式
+ *       isFiles()      → 当前是否走 files 模式
+ *       loadFileList() → GET fileApi，解析返回 JSON 校验 URL 必须在 /excel_files/ 目录下、按文件名判定 carrier
+ *       refresh()      → GET /api/shared/catalog，整体刷新快照和 revision
+ *       read(name, key?)   → GET /api/shared/{name}[/id]，读取服务器端数据；name ∈ { quotes, customers, rules }
+ *       write(name, value, remove) → quotes 走 POST/PUT/DELETE /api/shared/quotes[/id]，其他走 PUT /api/shared/datasets 整表覆盖
+ *       replace(values) → PUT /api/shared/datasets，批量替换多个 name
+ *       fixedRead(q)   → fetch q.url（直接下载 xlsx 到 ArrayBuffer，>20MB 抛错）
+ *       wire(q)        → 把 ArrayBuffer data 转 Base64，fixed-link 只保留元信息不传 data
+ *
+ *     内部辅助：
+ *       to64(data)     → 把 Uint8Array / ArrayBuffer 用分段 32KB btoa，避免 UTF-16 崩溃
+ *       url(path)      → 拼 base + /api/shared + path
+ *       request(path, options) → fetch 封装，45s 超时、HTTPS→HTTP 禁止、Bearer + If-Match（revision 做乐观锁）
+ *       accept(d)      → 接收服务器响应、更新 snapshot / revision / connected
+ *       guarded(fn)    → busy 互斥，防止多按钮并发
+ *       apply()        → 用户切换到 files 模式时的状态切换 + localStorage 持久化
+ *       reload()       → 刷新列表
+ *       downloadOriginal(q) → 下载 q.data 为 xlsx
+ *       migrate()      → 把本地 IndexedDB 数据合并上传到共享服务器（要求双方 ID 不冲突）
+ *
+ *   ── 第二段 IIFE（root.ShipGridQuoteManager）──
+ *     本机 IndexedDB + 共享层混合管理器，暴露给 engine/billing 使用。
+ *     打开 ShipGridCustomerQuotes 数据库（version 2），objectStore: quotes / rules / customers（keyPath=id）。
+ *
+ *     对外暴露（root.ShipGridQuoteManager）：
+ *       state          : Vue.reactive，quotes[] / rules[] / customers[] / loaded / error
+ *       read(name, key?)   → quotes 走 ShipGridShared.fixedRead（files 模式），其他走 IndexedDB
+ *       write(name, value, remove) → IndexedDB put/delete；quotes 在 files 模式下抛错禁止本地写
+ *       refresh()      → 先 ShipGridShared.refresh() / loadFileList()，再批量读三份，最后 dispatchEvent("customer-quotes-updated")
+ *       replaceSets(values) → 整表清空再批量 put；quotes 在 files 模式下禁用
+ *       localSnapshot() → { quotes, rules, customers } 三份 IndexedDB 数据的 JSON 快照（用于 migrate）
+ *       validateQuote(wb, carrier) → ShipGridQuoteValidators[carrier](wb)
+ *       match(rules, carrier, g)   → 按 carrier 过滤 rules，客户 ID 优先，其次名称精确匹配；冲突抛错
+ *
+ *     use(carrier, clear)  → 返回给 UI 的组合式对象，三选一：
+ *       pricingMode     : Vue.ref("auto" | "fixed" | "upload")
+ *       selectedQuote   : Vue.ref，固定模式选的 quoteId
+ *       quoteChoices    : 该 carrier 且 hasData 的 quotes 计算属性
+ *       pricingReady    → ready(file?)，当前模式是否已可以开始账单
+ *       preparePricing(file?) → 返回 { value(groupRow) → { wb, name, customerId, customerName, billingPolicy }, name }
+ *       downloadQuoteTemplate / downloadStandardDefault
+ *
+ *     同时把 root.openQuoteManager(carrier) / root.uploadFixedQuoteFiles(carrier, e) 挂到全局，供 UI 按钮调用。
+ *
+ *   ── Vue UI 弹窗 ──
+ *     两个 Vue.createApp().mount() 挂到 document.body（#shipgrid-shared 和 #quote-manager），
+ *     覆盖整个页面的 quote-overlay + quote-window 组合；关闭后留在 body 里以备下一次打开。
+ *     界面里同时支持：
+ *       1) 共享层设置（来源、文件接口、服务器地址、token、刷新、迁移）
+ *       2) 客户资料维护
+ *       3) Excel 批量导入客户-报价匹配模板（CustomerData.template / CustomerData.parse）
+ *       4) 报价表上传 / 替换 / 重命名 / 下载标准价表
+ *       5) 客户→报价匹配规则编辑（FedEx 时还允许配置 fedexZone / fedexWeight / fedexPrecision）
+ *       6) 导出 / 恢复 JSON 备份
+ *
+ * 依赖：
+ *   - XLSX                    （vendor/xlsx.full.min.js）
+ *   - ShipGridQuoteValidators （同目录 quote-validators.js）
+ *   - ShipGridStandardQuotes （同目录 standard-quotes.js）
+ *   - ShipGridCustomerData    （同目录 customer-data.js）
+ *   - ShipGridFedExCustomerPolicy （同目录 fedex-customer-policy.js）
+ *   - localStorage            ShipGridSharedSettingsV1 / ShipGridSharedToken
+ *   - indexedDB               ShipGridCustomerQuotes v2
+ */
 /*SG-AUDIT:finance-13.js*/ (function (root) {
 	"use strict";
 	// const names = [
@@ -166,9 +248,7 @@
 			(location.protocol === "http:" || location.protocol === "https:"
 				? location.origin
 				: "http://121.43.236.24"),
-		// token: localStorage.getItem("rbac_token") || "",
-		token:
-			"eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbiIsInVzZXJJZCI6MSwiaWF0IjoxNzk0Mzc1NzE0LCJleHAiOjE3OTQzODI5MTR9.H96SODM0dSS5zTI6V9LiSOJQ0rUbyJxlnpq16j25a1H2PH9XSMSUoxjeVm5aMOJ5YbaQJZf2xQ6pv7hKlb3crQ",
+		token: localStorage.getItem("rbac_token") || "",
 		revision: null,
 		connected: false,
 		busy: false,
@@ -893,8 +973,7 @@
 	const host = document.createElement("div");
 	host.id = "quote-manager";
 	document.body.appendChild(host);
-	host.innerHTML = `<div v-if="opened" class="quote-overlay" @click="opened=false"><section class="quote-window" @click.stop role="dialog" aria-modal="true" aria-label="固定报价与客户匹配管理"><div class="section-heading"><h2>固定报价与客户匹配管理</h2><button @click="opened=false">关闭</button></div><p>支持公司服务器共享或本地浏览器保存。共享模式下上传报价、客户资料及匹配关系会同步保存到服务器；生成账单前自动刷新。</p><div class="action-row"><button @click="backup" :disabled="busy">导出报价与规则备份</button><label class="text-button">恢复备份<input type="file" accept=".json" @change="restore" :disabled="busy"></label></div><p v-if="message" class="notice">{{message}}</p><p v-if="error||store.error" class="error">{{error||store.error}}</p><p class="notice">当前保存位置：{{sharing.enabled?'公司共享服务器':sharing.mode==='files'?'客户与匹配保存在本机；固定价表来自文件接口':'本机浏览器'}}。共享服务器单份报价上限20MB；本地上限200MB。</p><h3>客户资料（录入后可下拉选择）</h3><div class="select-grid"><label>客户ID<input v-model="customerForm.customerId" placeholder="与GTS客户ID一致，保留开头的0" :disabled="busy"></label><label>客户名称<input v-model="customerForm.customerName" placeholder="真实客户名称" :disabled="busy"></label></div><button @click="saveCustomer" :disabled="busy">{{customerForm.id?'保存客户修改':'保存客户资料'}}</button><button v-if="customerForm.id" @click="resetCustomer" :disabled="busy">取消编辑</button><div class="table-scroll"><table><thead><tr><th>客户ID</th><th>客户名称</th><th>操作</th></tr></thead><tbody><tr v-for="c in store.customers" :key="c.id"><td>{{c.customerId}}</td><td>{{c.customerName}}</td><td><button @click="editCustomer(c)" :disabled="busy">编辑客户</button></td></tr></tbody></table></div>
-<h3>Excel批量导入客户与报价匹配</h3><div class="action-row"><button @click="downloadMappingTemplate" :disabled="busy">下载Excel匹配模板</button><label class="text-button">导入Excel匹配表<input type="file" accept=".xlsx,.xls" @change="importMappings" :disabled="busy"></label></div><p>先上传报价，再填写承运商、客户ID、客户名称、报价名称。导入会保存新客户、更新相同客户的匹配；任何一行有错均不写入。</p><h3>上传固定报价表（数量不限）</h3><p><button @click="downloadStandard" :disabled="busy">下载所选承运商标准价表</button> 已保存报价可逐份下载为标准格式，再修改后替换上传。</p><div class="quote-direct-upload"><div class="select-grid"><label>承运商<select v-model="newCarrier" :disabled="busy"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>上传后绑定客户（可选，仅单份报价）<select v-model="uploadCustomer" :disabled="busy"><option value="">仅保存报价，稍后匹配客户</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>报价名称（可选，单份上传时使用）<input v-model="newName" :disabled="busy" placeholder="不填则使用文件名"></label></div><button class="primary" @click="$refs.fixedQuoteUpload.click()" :disabled="busy">{{busy?'正在校验并保存…':'＋ 选择并上传报价表（可多选）'}}</button><input ref="fixedQuoteUpload" class="quote-upload-file" type="file" accept=".xlsx,.xls" multiple @change="uploadNew" :disabled="busy"><p>选择承运商后可一次选择多份Excel，自动校验并保存。OnTrac、FedEx和UPS均不限制报价表数量，单个文件上限200MB。</p></div><h3>已保存报价 · UPS {{store.quotes.filter(q=>q.carrier==='ups'&&q.hasData).length}}份 / OnTrac {{store.quotes.filter(q=>q.carrier==='ontrac'&&q.hasData).length}}份 / FedEx {{store.quotes.filter(q=>q.carrier==='fedex'&&q.hasData).length}}份</h3><div class="table-scroll"><table><thead><tr><th>承运商</th><th>报价名称</th><th>文件</th><th>操作</th></tr></thead><tbody><tr v-for="q in store.quotes.filter(q=>q.hasData)" :key="q.id"><td>{{q.carrier==='ontrac'?'OnTrac':q.carrier==='ups'?'UPS':'FedEx'}}</td><td><input :value="q.name" @change="rename(q,$event.target.value)" :disabled="busy"></td><td>{{q.fileName||'尚未上传'}}<small v-if="q.updatedAt"> · {{q.updatedAt.slice(0,10)}}</small></td><td><button @click="downloadStandard(q)" :disabled="busy">下载标准价表</button><label class="text-button">{{q.hasData?'替换报价':'上传报价'}}<input type="file" accept=".xlsx,.xls" @change="upload(q,$event)" :disabled="busy"></label></td></tr></tbody></table></div><p v-if="!store.quotes.some(q=>q.hasData)" class="notice">还没有上传固定报价，请使用上方“选择并上传报价表”按钮。</p><h3>客户ID／名称 → 报价表</h3><p>同一客户可分别设置OnTrac、FedEx与UPS报价。ID优先、名称精确匹配；ID与名称指向不同报价时停止该订单出账。可填写真实客户名称，避免把“客服”列当作客户名称。</p><div class="select-grid"><label>选择已保存客户<select v-model="selectedCustomer" @change="selectCustomer"><option value="">选择客户自动填入ID和名称</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>承运商<select v-model="rule.carrier"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>客户ID<input v-model="rule.customerId" placeholder="与GTS客户ID一致"></label><label>客户名称<input v-model="rule.customerName" placeholder="例如 江苏虫洞-SG、NJSD-SG"></label><label>对应报价<select v-model="rule.quoteId"><option value="">请选择</option><option v-for="q in store.quotes.filter(q=>q.carrier===rule.carrier&&q.hasData)" :value="q.id">{{q.name}}</option></select></label><template v-if="rule.carrier==='fedex'"><label>分区来源<select v-model="rule.fedexZone"><option value="spGtsOtherMax">SmartPost按GTS，其他取大（默认）</option><option value="spGtsOtherRaw">SmartPost按GTS，其他按原始</option><option value="raw">全部按原始</option><option value="gts">全部按GTS</option><option value="max">全部原始/GTS取大</option></select></label><label>重量来源<select v-model="rule.fedexWeight"><option value="maximum">原始计费重、GTS实重、GTS体积重取大</option><option value="raw">原始账单计费重</option></select></label><label>GTS实重进位规则<select v-model="rule.fedexPrecision"><option value="ceil">直接向上取整磅</option><option value="two">截取两位小数后向上取整磅</option></select></label></template></div><p v-if="rule.carrier==='fedex'">分区固定取子单账单的分区代码；历史GTS/原始分区规则不再用于出账。重量与精度规则仍按客户配置。</p><button @click="saveRule" :disabled="busy">{{rule.id?'保存修改':'保存客户匹配'}}</button><button v-if="rule.id" @click="resetRule">取消编辑</button><div class="table-scroll"><table><thead><tr><th>承运商</th><th>客户ID</th><th>客户名称</th><th>报价</th><th>操作</th></tr></thead><tbody><tr v-for="r in store.rules" :key="r.id"><td>{{r.carrier}}</td><td>{{r.customerId}}</td><td>{{r.customerName}}</td><td>{{quoteName(r.quoteId)}}<small v-if="r.carrier==='fedex'"> · {{policyDescription(r)}}</small></td><td><button @click="edit(r)" :disabled="busy">编辑</button><button @click="remove(r)" :disabled="busy">删除规则</button></td></tr></tbody></table></div></section></div>`;
+	host.innerHTML = `<div v-if="opened" class="quote-overlay" @click="opened=false"><section class="quote-window" @click.stop role="dialog" aria-modal="true" aria-label="固定报价与客户匹配管理"><div class="section-heading"><h2>固定报价与客户匹配管理</h2><button @click="opened=false">关闭</button></div><p>支持公司服务器共享或本地浏览器保存。共享模式下上传报价、客户资料及匹配关系会同步保存到服务器；生成账单前自动刷新。</p><div class="action-row"><button @click="backup" :disabled="busy">导出报价与规则备份</button><label class="text-button">恢复备份<input type="file" accept=".json" @change="restore" :disabled="busy"></label></div><p v-if="message" class="notice">{{message}}</p><p v-if="error||store.error" class="error">{{error||store.error}}</p><p class="notice">当前保存位置：{{sharing.enabled?'公司共享服务器':sharing.mode==='files'?'客户与匹配保存在本机；固定价表来自文件接口':'本机浏览器'}}。共享服务器单份报价上限20MB；本地上限200MB。</p><h3>客户资料（录入后可下拉选择）</h3><div class="select-grid"><label>客户ID<input v-model="customerForm.customerId" placeholder="与GTS客户ID一致，保留开头的0" :disabled="busy"></label><label>客户名称<input v-model="customerForm.customerName" placeholder="真实客户名称" :disabled="busy"></label></div><button @click="saveCustomer" :disabled="busy">{{customerForm.id?'保存客户修改':'保存客户资料'}}</button><button v-if="customerForm.id" @click="resetCustomer" :disabled="busy">取消编辑</button><div class="table-scroll"><table><thead><tr><th>客户ID</th><th>客户名称</th><th>操作</th></tr></thead><tbody><tr v-for="c in store.customers" :key="c.id"><td>{{c.customerId}}</td><td>{{c.customerName}}</td><td><button @click="editCustomer(c)" :disabled="busy">编辑客户</button></td></tr></tbody></table></div><h3>Excel批量导入客户与报价匹配</h3><div class="action-row"><button @click="downloadMappingTemplate" :disabled="busy">下载Excel匹配模板</button><label class="text-button">导入Excel匹配表<input type="file" accept=".xlsx,.xls" @change="importMappings" :disabled="busy"></label></div><p>先上传报价，再填写承运商、客户ID、客户名称、报价名称。导入会保存新客户、更新相同客户的匹配；任何一行有错均不写入。</p><h3>上传固定报价表（数量不限）</h3><p><button @click="downloadStandard" :disabled="busy">下载所选承运商标准价表</button> 已保存报价可逐份下载为标准格式，再修改后替换上传。</p><div class="quote-direct-upload"><div class="select-grid"><label>承运商<select v-model="newCarrier" :disabled="busy"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>上传后绑定客户（可选，仅单份报价）<select v-model="uploadCustomer" :disabled="busy"><option value="">仅保存报价，稍后匹配客户</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>报价名称（可选，单份上传时使用）<input v-model="newName" :disabled="busy" placeholder="不填则使用文件名"></label></div><button class="primary" @click="$refs.fixedQuoteUpload.click()" :disabled="busy">{{busy?'正在校验并保存…':'＋ 选择并上传报价表（可多选）'}}</button><input ref="fixedQuoteUpload" class="quote-upload-file" type="file" accept=".xlsx,.xls" multiple @change="uploadNew" :disabled="busy"><p>选择承运商后可一次选择多份Excel，自动校验并保存。OnTrac、FedEx和UPS均不限制报价表数量，单个文件上限200MB。</p></div><h3>已保存报价 · UPS {{store.quotes.filter(q=>q.carrier==='ups'&&q.hasData).length}}份 / OnTrac {{store.quotes.filter(q=>q.carrier==='ontrac'&&q.hasData).length}}份 / FedEx {{store.quotes.filter(q=>q.carrier==='fedex'&&q.hasData).length}}份</h3><div class="table-scroll"><table><thead><tr><th>承运商</th><th>报价名称</th><th>文件</th><th>操作</th></tr></thead><tbody><tr v-for="q in store.quotes.filter(q=>q.hasData)" :key="q.id"><td>{{q.carrier==='ontrac'?'OnTrac':q.carrier==='ups'?'UPS':'FedEx'}}</td><td><input :value="q.name" @change="rename(q,$event.target.value)" :disabled="busy"></td><td>{{q.fileName||'尚未上传'}}<small v-if="q.updatedAt"> · {{q.updatedAt.slice(0,10)}}</small></td><td><button @click="downloadStandard(q)" :disabled="busy">下载标准价表</button><label class="text-button">{{q.hasData?'替换报价':'上传报价'}}<input type="file" accept=".xlsx,.xls" @change="upload(q,$event)" :disabled="busy"></label></td></tr></tbody></table></div><p v-if="!store.quotes.some(q=>q.hasData)" class="notice">还没有上传固定报价，请使用上方“选择并上传报价表”按钮。</p><h3>客户ID／名称 → 报价表</h3><p>同一客户可分别设置OnTrac、FedEx与UPS报价。ID优先、名称精确匹配；ID与名称指向不同报价时停止该订单出账。可填写真实客户名称，避免把“客服”列当作客户名称。</p><div class="select-grid"><label>选择已保存客户<select v-model="selectedCustomer" @change="selectCustomer"><option value="">选择客户自动填入ID和名称</option><option v-for="c in store.customers" :value="c.id">{{c.customerId}} · {{c.customerName}}</option></select></label><label>承运商<select v-model="rule.carrier"><option value="ontrac">OnTrac</option><option value="fedex">FedEx</option><option value="ups">UPS</option></select></label><label>客户ID<input v-model="rule.customerId" placeholder="与GTS客户ID一致"></label><label>客户名称<input v-model="rule.customerName" placeholder="例如 江苏虫洞-SG、NJSD-SG"></label><label>对应报价<select v-model="rule.quoteId"><option value="">请选择</option><option v-for="q in store.quotes.filter(q=>q.carrier===rule.carrier&&q.hasData)" :value="q.id">{{q.name}}</option></select></label><template v-if="rule.carrier==='fedex'"><label>分区来源<select v-model="rule.fedexZone"><option value="spGtsOtherMax">SmartPost按GTS，其他取大（默认）</option><option value="spGtsOtherRaw">SmartPost按GTS，其他按原始</option><option value="raw">全部按原始</option><option value="gts">全部按GTS</option><option value="max">全部原始/GTS取大</option></select></label><label>重量来源<select v-model="rule.fedexWeight"><option value="maximum">原始计费重、GTS实重、GTS体积重取大</option><option value="raw">原始账单计费重</option></select></label><label>GTS实重进位规则<select v-model="rule.fedexPrecision"><option value="ceil">直接向上取整磅</option><option value="two">截取两位小数后向上取整磅</option></select></label></template></div><p v-if="rule.carrier==='fedex'">分区固定取子单账单的分区代码；历史GTS/原始分区规则不再用于出账。重量与精度规则仍按客户配置。</p><button @click="saveRule" :disabled="busy">{{rule.id?'保存修改':'保存客户匹配'}}</button><button v-if="rule.id" @click="resetRule">取消编辑</button><div class="table-scroll"><table><thead><tr><th>承运商</th><th>客户ID</th><th>客户名称</th><th>报价</th><th>操作</th></tr></thead><tbody><tr v-for="r in store.rules" :key="r.id"><td>{{r.carrier}}</td><td>{{r.customerId}}</td><td>{{r.customerName}}</td><td>{{quoteName(r.quoteId)}}<small v-if="r.carrier==='fedex'"> · {{policyDescription(r)}}</small></td><td><button @click="edit(r)" :disabled="busy">编辑</button><button @click="remove(r)" :disabled="busy">删除规则</button></td></tr></tbody></table></div></section></div>`;
 	Vue.createApp({
 		setup() {
 			const opened = Vue.ref(false),

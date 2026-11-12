@@ -1,3 +1,34 @@
+/**
+ * 文件：fedex-billing.js
+ * 路径：fedex-billing/ui/
+ * 职责：FedEx 账单的 Vue 3 组合式 UI 层。
+ *       创建并挂载 ShipGridModule 应用，提供文件上传、燃油更新、运行计算、分页展示结果、下载输出功能。
+ *
+ * 核心状态（setup()）：
+ *   files       : Vue.reactive，5 个上传槽 { invoice, gts, child, quote, override }，每个 { name, wb }
+ *   result      : Vue.shallowRef，FedExBilling.calculate 返回的完整结果对象
+ *   busy / error / processing / fuelMessage / fuelRefreshing : 交互状态
+ *   search / customer / page / showAll : 分页与筛选参数（客户下拉 + 搜索框 + 每页 20 条）
+ *   settings    : { originalFuelFactor: 0.7 }，原始账户燃油支付比例
+ *   pricing     : ShipGridQuoteManager.use("fedex", clear) 返回的报价管理对象
+ *
+ * 函数：
+ *   upload(file, key)       → 读入 file（≤200MB 的 xls/xlsx/csv）到 files[key]，错误写入 error
+ *   refreshFuel()           → fetch("/api/fedex/surcharge/weekly") 更新 FedExFuel 全局，file:// 协议下提示源码工具
+ *   run()                   → 校验 settings.originalFuelFactor（0–1）→ 定位 GTS 工作表（内嵌或独立上传）→ 调用 pricing.preparePricing(files.quote) 取得逐单报价 → 调用 FedExBilling.calculate(invoiceWb, gtsInput, selection.value, settings + childInvoice + overrideWb)
+ *   filtered / pages / visible → 计算属性：按 customer + search 过滤，每页 20 条
+ *   columns                 → 动态结果表头（客户ID/名称/报价/运单号/服务/重量/尺寸/来源/分区/各项费用/燃油/总净/差异）
+ *
+ * 挂载方式：
+ *   ShipGridModule.createApp({ setup }).mount()，宿主 module-runtime.js 负责把它嵌入到 iframe 或 body 容器
+ *
+ * 依赖：
+ *   - XLSX, Vue（全局）
+ *   - ShipGridModule（由 module-runtime.js 暴露，宿主平台封装 createApp/mount/通信）
+ *   - ShipGridQuoteManager（报价管理器）
+ *   - ShipGridChildInvoice（子单账单选择）
+ *   - FedExBilling（引擎）
+ */
 /*SG-AUDIT:finance-17.js*/ const FedExApp = ShipGridModule.createApp({
 	setup() {
 		const files = Vue.reactive({

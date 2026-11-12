@@ -1,10 +1,35 @@
-/*SG-AUDIT:finance-12.js*/ (function (root) {
-	"use strict";
+/**
+ * customer-data.js — 客户资料校验与 Excel 批量导入
+ * ================================================
+ * 职责：
+ *   1. customer() — 校验单个客户对象（ID + 名称必填、不重复）
+ *   2. legacy() — 从旧版 rules 数组自动迁移生成 customers 数组（历史兼容）
+ *   3. carrier() — 承运商名称标准化（OnTrac/FedEx/UPS → 小写英文标识）
+ *   4. parse() — 解析"客户报价匹配"Excel 的四个必填列
+ *   5. stage() — 批量导入校验（客户唯一性、报价存在性、ID/名称冲突检测）
+ *   6. template() — 生成带填写说明的 Excel 匹配模板
+ *
+ * 被谁依赖：quote-manager.js（UI 导入流程的全部校验）
+ *
+ * 对外接口：ShipGridCustomerData = { customer, legacy, parse, stage, template, norm }
+ */
+(function (root) {
+	("use strict");
+
+	/** 标准化：NFKC 归一 + 去空格 + 小写，用于客户ID/名称模糊去重 */
 	const norm = (v) =>
 		String(v ?? "")
 			.normalize("NFKC")
 			.trim()
 			.toLowerCase();
+
+	/**
+	 * customer — 校验单个客户对象并去重
+	 * @param {object} value — { id?, customerId, customerName }
+	 * @param {Array} others — 已存在的 customers 数组（用于冲突检测）
+	 * @returns {object} 规范化后的客户对象
+	 * @throws ID/名称缺失或与 others 中已有记录重复时抛错
+	 */
 	function customer(value, others) {
 		const c = {
 			...value,
@@ -22,6 +47,15 @@
 				throw Error("客户ID或名称已存在，请选择或编辑已有客户");
 		return c;
 	}
+
+	/**
+	 * legacy — 从旧版 rules 数组中提取独立的 customers 数组
+	 * 早期版本只有规则（含 customerId/customerName），后来拆分出独立的客户资料表。
+	 * 此函数在首次启动时自动迁移，避免用户手动重录。
+	 * @param {Array} rules — 旧版规则数组
+	 * @param {Function} id  — 生成唯一ID的函数（如 crypto.randomUUID）
+	 * @returns {Array} 去重后的 customers 数组
+	 */
 	function legacy(rules, id) {
 		const out = [];
 		for (const r of rules) {
@@ -43,6 +77,14 @@
 		}
 		return out;
 	}
+
+	/**
+	 * carrier — 把 Excel 中填写的承运商名称标准化为英文标识
+	 * 接受：OnTrac / Ontrac / on-trac / fedex / FedEx / ups / UPS 等
+	 * @param {string} value — Excel 中的承运商单元格值
+	 * @returns {"ontrac"|"fedex"|"ups"} 小写英文标识
+	 * @throws 非三大承运商时抛错
+	 */
 	function carrier(value) {
 		const c = norm(value).replace(/[\s_-]/g, "");
 		if (c === "ontrac") return "ontrac";
@@ -50,6 +92,14 @@
 		if (c === "ups") return "ups";
 		throw Error("承运商仅支持OnTrac、FedEx或UPS");
 	}
+	/**
+	 * parse — 解析客户报价匹配 Excel 的第一个工作表
+	 * 要求四个必填列：承运商、客户ID、客户名称、报价名称
+	 * 支持工作表名为"客户报价匹配"或任意第一个工作表
+	 * @param {object} wb — XLSX workbook
+	 * @returns {Array<{row, carrier, customerId, customerName, quoteName}>} 待导入行
+	 * @throws 表头缺失/重复、Excel 为空、无有效数据时抛错
+	 */
 	function parse(wb) {
 		const sheet =
 			wb.Sheets[
@@ -87,6 +137,24 @@
 		if (!data.length) throw Error("没有可导入的匹配关系，请先填写模板");
 		return data;
 	}
+
+	/**
+	 * stage — 批量导入事务性校验与合并
+	 * 逐行校验，累积错误。有任何一行出错则整张表不写入，原设置保留。
+	 *
+	 * @param {Array} rows   — parse() 返回的待导入行
+	 * @param {object} current — { customers, rules, quotes } 当前已保存数据
+	 * @param {Function} id  — 生成唯一ID函数
+	 * @param {Function} validateRule — 对每条规则额外校验（FedEx 时调用 policy）
+	 * @returns {{ customers, rules, created, updated }} 合并后的数组
+	 * @throws 任何校验失败时抛错（携带前 10 条错误消息）
+	 *
+	 * 校验项：
+	 *   - 报价名称在本承运商内唯一且已上传
+	 *   - 客户ID ↔ 名称一致性（与已保存客户资料比对）
+	 *   - 同一 Excel 内 客户+承运商 不重复
+	 *   - 同一 客户+承运商 在 rules 中不重复（否则更新已有规则）
+	 */
 	function stage(rows, current, id, validateRule) {
 		const customers = current.customers.map((c) => ({ ...c })),
 			rules = current.rules.map((r) => ({ ...r })),
@@ -172,6 +240,14 @@
 			);
 		return { customers, rules, created, updated };
 	}
+	/**
+	 * template — 生成客户报价匹配 Excel 导入模板（三个工作表）
+	 *   Sheet1 "客户报价匹配": 四列表头，B 列预设为文本格式防止客户ID精度丢失，预留 10000 行
+	 *   Sheet2 "填写说明": 中文填写指引，含承运商/客户ID/报价名称的详细说明
+	 *   Sheet3 "已上传报价": 当前系统中已上传的报价清单，供用户复制报价名称
+	 * @param {Array} quotes — 当前已上传的报价数组（用于填充"已上传报价"工作表）
+	 * @returns {object} XLSX workbook（可直接 XLSX.writeFile 下载）
+	 */
 	function template(quotes) {
 		const wb = XLSX.utils.book_new(),
 			data = XLSX.utils.aoa_to_sheet([
@@ -218,6 +294,8 @@
 		XLSX.utils.book_append_sheet(wb, qs, "已上传报价");
 		return wb;
 	}
+
+	/** 对外暴露统一接口 */
 	root.ShipGridCustomerData = {
 		customer,
 		legacy,
