@@ -3,6 +3,7 @@ package com.example.rbac.service;
 import cn.hutool.http.HttpUtil;
 import com.example.rbac.dto.OnTracFuelSurchargeRate;
 import com.example.rbac.entity.OnTracRyf;
+import com.example.rbac.entity.SysTaskLog;
 import com.example.rbac.mapper.OnTracRyfMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class OnTracRyfService {
 
     private final OnTracRyfMapper onTracRyfMapper;
+    private final ScheduledTaskLogService scheduledTaskLogService;
 
     private static final String ONTRAC_SURCHARGE_URL =
             "https://www.ontrac.com/surchargesandrates/";
@@ -176,12 +178,15 @@ public class OnTracRyfService {
 
     @Scheduled(cron = "0 0 9 * * 3")
     public void scheduledSyncSurchargeData() {
+        SysTaskLog taskLog = scheduledTaskLogService.start("ontrac-sync", "OnTrac燃油附加费同步");
         log.info("定时任务触发：每周三上午9点同步OnTrac燃油附加费数据");
         try {
             int count = syncSurchargeData();
             log.info("定时任务完成，共导入{}条记录", count);
+            scheduledTaskLogService.success(taskLog, "执行成功，共导入" + count + "条记录");
         } catch (Exception e) {
             log.error("定时任务同步失败", e);
+            scheduledTaskLogService.fail(taskLog, "执行失败：" + e.getMessage(), e);
         }
     }
 }

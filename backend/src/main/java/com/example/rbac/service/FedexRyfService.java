@@ -3,6 +3,7 @@ package com.example.rbac.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.rbac.dto.OnTracFuelSurchargeRate;
 import com.example.rbac.entity.FedexRyf;
+import com.example.rbac.entity.SysTaskLog;
 import com.example.rbac.mapper.FedexRyfMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +40,7 @@ import java.util.stream.Collectors;
 public class FedexRyfService {
 
     private final FedexRyfMapper fedexRyfMapper;
+    private final ScheduledTaskLogService scheduledTaskLogService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${playwright.chromium.path:}")
@@ -1279,12 +1281,15 @@ public class FedexRyfService {
 
     @Scheduled(cron = "0 0 9 * * 1")
     public void scheduledSyncSurchargeData() {
+        SysTaskLog taskLog = scheduledTaskLogService.start("fedex-sync", "FedEx燃油附加费同步");
         log.warn("定时任务触发：每周一上午9点同步FedEx燃油附加费数据");
         try {
             int count = syncSurchargeData();
             log.warn("定时任务完成，共导入{}条记录", count);
+            scheduledTaskLogService.success(taskLog, "执行成功，共导入" + count + "条记录");
         } catch (Exception e) {
             log.error("定时任务同步失败", e);
+            scheduledTaskLogService.fail(taskLog, "执行失败：" + e.getMessage(), e);
         }
     }
 }

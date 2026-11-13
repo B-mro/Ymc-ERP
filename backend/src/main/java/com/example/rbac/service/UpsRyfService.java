@@ -4,6 +4,7 @@ import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.example.rbac.dto.UpsFuelSurchargeRate;
+import com.example.rbac.entity.SysTaskLog;
 import com.example.rbac.entity.UpsRyf;
 import com.example.rbac.mapper.UpsRyfMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 public class UpsRyfService {
 
     private final UpsRyfMapper upsRyfMapper;
+    private final ScheduledTaskLogService scheduledTaskLogService;
     private final ObjectMapper objectMapper;
 
     private static final String UPS_SURCHARGE_URL =
@@ -38,12 +40,15 @@ public class UpsRyfService {
 
     @Scheduled(cron = "0 0 9 * * 2")
     public void scheduledSyncSurchargeData() {
+        SysTaskLog taskLog = scheduledTaskLogService.start("ups-sync", "UPS燃油附加费同步");
         log.info("定时任务触发：每周二上午9点同步UPS燃油附加费数据");
         try {
             int count = syncRates();
             log.info("定时任务完成，共新增{}条记录", count);
+            scheduledTaskLogService.success(taskLog, "执行成功，共新增" + count + "条记录");
         } catch (Exception e) {
             log.error("定时任务同步失败", e);
+            scheduledTaskLogService.fail(taskLog, "执行失败：" + e.getMessage(), e);
         }
     }
 
