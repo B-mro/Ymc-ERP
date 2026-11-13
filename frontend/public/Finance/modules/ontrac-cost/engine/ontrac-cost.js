@@ -273,6 +273,7 @@
 					: "两者相同";
 		const [L, W, H] = dims,
 			vol = L * W * H;
+			console.log(L, W, H, vol);
 		// os = Oversize (LPS) 触发：长>72 或 重>110 或 体积>17280
 		const os = L > 72 || actual > 110 || vol > 17280;
 		// ahs = Additional Handling 触发：os=false 时满足以下任一
@@ -290,7 +291,9 @@
 		// bw = 最终计费重（base weight）
 		//   先取重量政策算出的 billed，再按规则抬高：
 		//   os → 至少 90lb，ahs → 至少 40lb，否则保持原样
-		const bw = Math.max(billed, os ? 90 : ahs ? 40 : 0);
+		console.log(os, ahs);
+		// const bw = Math.max(billed, os ? 90 : ahs ? 40 : 0);
+		const bw = billed;
 		if (actual > 150 || L > 108 || L + 2 * W + 2 * H > 165 || bw > 150)
 			throw Error("超限订单需人工确认基础运费，旺季$595规则已保留");
 		return {
